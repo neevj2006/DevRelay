@@ -1,3 +1,10 @@
+import {
+  incidentActorTypeValues,
+  incidentLifecycleValues,
+  incidentOutcomeValues,
+  incidentSeverityValues,
+  incidentSourceValues,
+} from "@devrelay/contracts";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -25,47 +32,14 @@ const instant = {
   withTimezone: true,
 } as const;
 
-export const incidentLifecycleValues = [
-  "detected",
-  "investigating",
-  "identified",
-  "monitoring",
-  "resolved",
-  "postmortem_published",
-] as const;
-export type IncidentLifecycle = (typeof incidentLifecycleValues)[number];
 export const incidentLifecycle = pgEnum("incident_lifecycle", incidentLifecycleValues);
 
-export const incidentSourceValues = [
-  "automatic_monitor",
-  "manual_responder",
-  "external_report",
-  "maintenance",
-  "system_health",
-] as const;
-export type IncidentSource = (typeof incidentSourceValues)[number];
 export const incidentSource = pgEnum("incident_source", incidentSourceValues);
 
-export const incidentSeverityValues = [
-  "degraded_performance",
-  "partial_outage",
-  "major_outage",
-] as const;
-export type IncidentSeverity = (typeof incidentSeverityValues)[number];
 export const incidentSeverity = pgEnum("incident_severity", incidentSeverityValues);
 
-export const incidentOutcomeValues = [
-  "resolved",
-  "duplicate",
-  "merged",
-  "false_alarm",
-  "maintenance_related",
-] as const;
-export type IncidentOutcome = (typeof incidentOutcomeValues)[number];
 export const incidentOutcome = pgEnum("incident_outcome", incidentOutcomeValues);
 
-export const incidentActorTypeValues = ["user", "monitor", "worker", "system"] as const;
-export type IncidentActorType = (typeof incidentActorTypeValues)[number];
 export const incidentActorType = pgEnum("incident_actor_type", incidentActorTypeValues);
 
 export const incidents = pgTable(

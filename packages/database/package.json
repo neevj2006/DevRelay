@@ -15,15 +15,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "db:check": "drizzle-kit check",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
+    "db:check": "pnpm --filter @devrelay/contracts build && drizzle-kit check",
+    "db:generate": "pnpm --filter @devrelay/contracts build && drizzle-kit generate",
+    "db:migrate": "pnpm --filter @devrelay/contracts build && drizzle-kit migrate",
+    "db:studio": "pnpm --filter @devrelay/contracts build && drizzle-kit studio",
     "lint": "eslint src",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@devrelay/contracts": "workspace:*",
     "drizzle-orm": "0.45.2",
     "pg": "8.22.0"
   },

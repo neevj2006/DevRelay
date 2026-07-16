@@ -1,3 +1,10 @@
+import {
+  auditActorTypeValues,
+  maintenanceStatusValues,
+  postmortemStatusValues,
+  retentionResourceValues,
+  retentionRunStatusValues,
+} from "@devrelay/contracts";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -28,28 +35,14 @@ const instant = {
   withTimezone: true,
 } as const;
 
-export const maintenanceStatusValues = ["scheduled", "cancelled"] as const;
-export type MaintenanceStatus = (typeof maintenanceStatusValues)[number];
 export const maintenanceStatus = pgEnum("maintenance_status", maintenanceStatusValues);
 
-export const auditActorTypeValues = ["user", "worker", "system", "oauth"] as const;
-export type AuditActorType = (typeof auditActorTypeValues)[number];
 export const auditActorType = pgEnum("audit_actor_type", auditActorTypeValues);
 
-export const postmortemStatusValues = ["draft", "published"] as const;
-export type PostmortemStatus = (typeof postmortemStatusValues)[number];
 export const postmortemStatus = pgEnum("postmortem_status", postmortemStatusValues);
 
-export const retentionResourceValues = [
-  "check_results",
-  "delivery_attempts",
-  "completed_outbox_events",
-] as const;
-export type RetentionResource = (typeof retentionResourceValues)[number];
 export const retentionResource = pgEnum("retention_resource", retentionResourceValues);
 
-export const retentionRunStatusValues = ["running", "succeeded", "failed"] as const;
-export type RetentionRunStatus = (typeof retentionRunStatusValues)[number];
 export const retentionRunStatus = pgEnum("retention_run_status", retentionRunStatusValues);
 
 export const maintenanceWindows = pgTable(

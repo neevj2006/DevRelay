@@ -1,3 +1,13 @@
+import {
+  deliveryAttemptStatusValues,
+  notificationChannelValues,
+  notificationDeliveryStatusValues,
+  notificationKindValues,
+  outboxEventStatusValues,
+  subscriberStateValues,
+  subscriberTokenPurposeValues,
+  webhookDestinationStateValues,
+} from "@devrelay/contracts";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -31,66 +41,29 @@ const instant = {
   withTimezone: true,
 } as const;
 
-export const subscriberStateValues = [
-  "pending_verification",
-  "active",
-  "unsubscribed",
-  "suppressed",
-] as const;
-export type SubscriberState = (typeof subscriberStateValues)[number];
 export const subscriberState = pgEnum("subscriber_state", subscriberStateValues);
 
-export const subscriberTokenPurposeValues = ["verify", "preferences", "unsubscribe"] as const;
-export type SubscriberTokenPurpose = (typeof subscriberTokenPurposeValues)[number];
 export const subscriberTokenPurpose = pgEnum(
   "subscriber_token_purpose",
   subscriberTokenPurposeValues,
 );
 
-export const webhookDestinationStateValues = ["active", "disabled"] as const;
-export type WebhookDestinationState = (typeof webhookDestinationStateValues)[number];
 export const webhookDestinationState = pgEnum(
   "webhook_destination_state",
   webhookDestinationStateValues,
 );
 
-export const notificationChannelValues = ["email", "webhook"] as const;
-export type NotificationChannel = (typeof notificationChannelValues)[number];
 export const notificationChannel = pgEnum("notification_channel", notificationChannelValues);
 
-export const notificationKindValues = [
-  "subscription_verification",
-  "incident_update",
-  "maintenance",
-] as const;
-export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKind = pgEnum("notification_kind", notificationKindValues);
 
-export const notificationDeliveryStatusValues = [
-  "pending",
-  "sending",
-  "succeeded",
-  "retry_scheduled",
-  "permanently_failed",
-  "suppressed",
-] as const;
-export type NotificationDeliveryStatus = (typeof notificationDeliveryStatusValues)[number];
 export const notificationDeliveryStatus = pgEnum(
   "notification_delivery_status",
   notificationDeliveryStatusValues,
 );
 
-export const deliveryAttemptStatusValues = [
-  "started",
-  "succeeded",
-  "retryable_failure",
-  "permanent_failure",
-] as const;
-export type DeliveryAttemptStatus = (typeof deliveryAttemptStatusValues)[number];
 export const deliveryAttemptStatus = pgEnum("delivery_attempt_status", deliveryAttemptStatusValues);
 
-export const outboxEventStatusValues = ["pending", "claimed", "published", "failed"] as const;
-export type OutboxEventStatus = (typeof outboxEventStatusValues)[number];
 export const outboxEventStatus = pgEnum("outbox_event_status", outboxEventStatusValues);
 
 export const statusPages = pgTable(
