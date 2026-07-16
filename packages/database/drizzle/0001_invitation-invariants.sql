@@ -1,0 +1,2 @@
+ALTER TABLE "organization_invitations" ADD CONSTRAINT "organization_invitations_non_owner_role" CHECK ("organization_invitations"."role" <> 'owner');--> statement-breakpoint
+ALTER TABLE "organization_invitations" ADD CONSTRAINT "organization_invitations_single_terminal_state" CHECK (NOT ("organization_invitations"."accepted_at" IS NOT NULL AND "organization_invitations"."revoked_at" IS NOT NULL));

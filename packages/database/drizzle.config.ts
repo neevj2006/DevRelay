@@ -10,7 +10,7 @@ export default defineConfig({
     table: "__drizzle_migrations",
   },
   out: "./drizzle",
-  schema: "./src/schema/**/*.ts",
+  schema: "./src/schema/index.ts",
   strict: true,
   verbose: true,
   ...(databaseUrl === undefined
