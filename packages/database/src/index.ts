@@ -1,1 +1,21 @@
-export const databasePackageName = "@devrelay/database" as const;
+export {
+  createDatabaseClient,
+  createDatabasePool,
+  type Database,
+  type DatabaseClient,
+} from "./client.js";
+export {
+  auditTimestamps,
+  primaryKeyColumn,
+  softDeleteColumn,
+  tenantOrganizationColumn,
+} from "./conventions.js";
+export {
+  buildCursorPage,
+  type CursorPage,
+  decodeTimestampCursor,
+  encodeTimestampCursor,
+  normalizePageSize,
+  type TimestampCursor,
+} from "./pagination.js";
+export { type DatabaseTransaction, runInTransaction } from "./transactions.js";
