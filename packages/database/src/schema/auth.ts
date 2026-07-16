@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { auditTimestamps, primaryKeyColumn } from "../conventions.js";
 
@@ -79,4 +89,15 @@ export const verifications = pgTable(
     index("verifications_identifier_idx").on(table.identifier),
     index("verifications_expires_at_idx").on(table.expiresAt),
   ],
+);
+
+export const authRateLimits = pgTable(
+  "auth_rate_limits",
+  {
+    id: primaryKeyColumn(),
+    key: text("key").notNull(),
+    count: integer("count").notNull(),
+    lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+  },
+  (table) => [uniqueIndex("auth_rate_limits_key_unique").on(table.key)],
 );

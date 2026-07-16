@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { InlineFeedback } from "@/components/feedback";
 import { MarketingHeader } from "@/components/marketing-header";
+import { SignInActions } from "@/components/sign-in-actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -85,10 +86,7 @@ export default async function SignInPage({
                 tone={message.tone}
               />
             ) : null}
-            <Button className="w-full" size="lg">
-              <Code2 aria-hidden="true" />
-              Continue with GitHub
-            </Button>
+            <SignInActions />
             <div className="flex items-center gap-3">
               <Separator className="flex-1" />
               <span className="text-xs text-muted-foreground">or</span>

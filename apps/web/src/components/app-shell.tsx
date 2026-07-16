@@ -41,12 +41,14 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 type AppShellProps = {
   orgSlug: string;
   children: React.ReactNode;
   role?: OrganizationRole;
+  user: { email: string; name: string };
 };
 
 function OrganizationSwitcher({
@@ -99,26 +101,34 @@ function OrganizationSwitcher({
   );
 }
 
-function AccountMenu() {
+function AccountMenu({ user }: { user: { email: string; name: string } }) {
+  const initials =
+    user.name
+      .trim()
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || user.email.slice(0, 2).toUpperCase();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          aria-label="Open NA account menu"
+          aria-label={`Open ${initials} account menu`}
           className="rounded-full"
           size="icon"
           variant="ghost"
         >
           <Avatar className="size-8">
-            <AvatarFallback>NA</AvatarFallback>
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>
-          <span className="block">Neev A.</span>
+          <span className="block">{user.name}</span>
           <span className="block truncate text-xs font-normal text-muted-foreground">
-            neev@example.com
+            {user.email}
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -126,7 +136,13 @@ function AccountMenu() {
           <CircleUserRound aria-hidden="true" />
           Account settings
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() =>
+            authClient.signOut({
+              fetchOptions: { onSuccess: () => window.location.assign("/sign-in") },
+            })
+          }
+        >
           <LogOut aria-hidden="true" />
           Sign out
         </DropdownMenuItem>
@@ -241,7 +257,7 @@ function Breadcrumbs({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-export function AppShell({ orgSlug, role = "owner", children }: AppShellProps) {
+export function AppShell({ orgSlug, role = "owner", children, user }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="min-h-screen bg-background">
@@ -343,7 +359,7 @@ export function AppShell({ orgSlug, role = "owner", children }: AppShellProps) {
             Production
           </span>
           <ThemeSelector />
-          <AccountMenu />
+          <AccountMenu user={user} />
         </header>
         <div className="border-b border-[var(--status-degraded-border)] bg-[var(--status-degraded-bg)] px-4 py-2 text-[13px] text-[var(--status-degraded-fg)] sm:px-6">
           <div className="mx-auto flex max-w-[1440px] items-center gap-2">
