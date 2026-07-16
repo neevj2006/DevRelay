@@ -18,4 +18,5 @@ export {
   normalizePageSize,
   type TimestampCursor,
 } from "./pagination.js";
+export * from "./schema/index.js";
 export { type DatabaseTransaction, runInTransaction } from "./transactions.js";

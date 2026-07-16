@@ -17,6 +17,9 @@ importers:
       '@types/pg':
         specifier: ^8.15.5
         version: 8.20.0
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
       eslint:
         specifier: ^9.38.0
         version: 9.39.5(jiti@2.7.0)

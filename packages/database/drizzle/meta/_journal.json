@@ -1,5 +1,20 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784235910626,
+      "tag": "0000_authentication-and-tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784236083939,
+      "tag": "0001_invitation-invariants",
+      "breakpoints": true
+    }
+  ]
 }
