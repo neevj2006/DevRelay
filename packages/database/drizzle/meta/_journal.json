@@ -15,6 +15,13 @@
       "when": 1784236083939,
       "tag": "0001_invitation-invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784236806209,
+      "tag": "0002_monitoring-schema",
+      "breakpoints": true
     }
   ]
 }
