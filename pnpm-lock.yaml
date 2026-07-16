@@ -56,6 +56,9 @@ importers:
       '@devrelay/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@devrelay/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@devrelay/database':
         specifier: workspace:*
         version: link:../../packages/database

@@ -12,9 +12,16 @@ describe("authorization-aware navigation", () => {
       group.items.map((item) => item.segment),
     );
     expect(segments).not.toContain("/members");
-    expect(segments).not.toContain("/audit");
     expect(segments).not.toContain("/settings");
     expect(segments).not.toContain("/operations/health");
+    expect(segments).toContain("/audit");
+  });
+
+  it("keeps organization settings owner-only", () => {
+    const adminSegments = navigationForRole("admin").flatMap((group) =>
+      group.items.map((item) => item.segment),
+    );
+    expect(adminSegments).not.toContain("/settings");
   });
 });
 

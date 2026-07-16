@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check, RadioTower } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, RadioTower } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { FormField } from "@/components/form-field";
 import { StatusBadge } from "@/components/operational-status";
@@ -30,12 +31,34 @@ export function slugifyOrganizationName(value: string) {
 }
 
 export function OnboardingFlow() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [organizationName, setOrganizationName] = useState("Acme Cloud");
   const [slug, setSlug] = useState("acme");
   const [serviceName, setServiceName] = useState("API Gateway");
   const [isPublic, setIsPublic] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const previewUrl = `devrelay.dev/status/${slug || "your-team"}`;
+
+  async function createWorkspace() {
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/backend/organizations", {
+        body: JSON.stringify({ name: organizationName, slug }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(body?.message ?? "The organization could not be created.");
+        return;
+      }
+      router.push(`/app/${slug}`);
+      router.refresh();
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="w-full max-w-2xl">
@@ -194,16 +217,15 @@ export function OnboardingFlow() {
               Continue <ArrowRight aria-hidden="true" />
             </Button>
           ) : (
-            <Button asChild>
-              <Link href={`/app/${slug || "acme"}`}>
-                Open workspace <ArrowRight aria-hidden="true" />
-              </Link>
+            <Button disabled={submitting} onClick={createWorkspace}>
+              {submitting ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null}
+              Open workspace <ArrowRight aria-hidden="true" />
             </Button>
           )}
         </CardFooter>
       </Card>
       <p className="mt-5 text-center text-xs text-muted-foreground">
-        Progress is designed to be resumable when authentication is connected.
+        The organization is created only when you open the workspace.
       </p>
     </div>
   );
