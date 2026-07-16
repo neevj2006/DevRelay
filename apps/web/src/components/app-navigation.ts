@@ -67,8 +67,8 @@ export const applicationNavigation: ReadonlyArray<NavigationGroup> = [
     label: "Organization",
     items: [
       { label: "Members & roles", segment: "/members", icon: Users, roles: administrativeRoles },
-      { label: "Audit log", segment: "/audit", icon: ScrollText, roles: administrativeRoles },
-      { label: "Settings", segment: "/settings", icon: Settings, roles: administrativeRoles },
+      { label: "Audit log", segment: "/audit", icon: ScrollText, roles: allRoles },
+      { label: "Settings", segment: "/settings", icon: Settings, roles: ["owner"] },
     ],
   },
 ];

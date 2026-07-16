@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 
 type AppShellProps = {
   orgSlug: string;
+  organizations: ReadonlyArray<{ name: string; slug: string }>;
   children: React.ReactNode;
   role?: OrganizationRole;
   user: { email: string; name: string };
@@ -53,15 +54,13 @@ type AppShellProps = {
 
 function OrganizationSwitcher({
   orgSlug,
+  organizations,
   collapsed = false,
 }: {
   orgSlug: string;
+  organizations: ReadonlyArray<{ name: string; slug: string }>;
   collapsed?: boolean;
 }) {
-  const organizations = [
-    { slug: "acme", name: "Acme Cloud" },
-    { slug: "northstar", name: "Northstar Labs" },
-  ];
   const active = organizations.find((organization) => organization.slug === orgSlug) ?? {
     slug: orgSlug,
     name: orgSlug.replaceAll("-", " "),
@@ -257,7 +256,13 @@ function Breadcrumbs({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-export function AppShell({ orgSlug, role = "owner", children, user }: AppShellProps) {
+export function AppShell({
+  orgSlug,
+  organizations,
+  role = "owner",
+  children,
+  user,
+}: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="min-h-screen bg-background">
@@ -294,7 +299,11 @@ export function AppShell({ orgSlug, role = "owner", children, user }: AppShellPr
           ) : null}
         </div>
         <div className="p-3">
-          <OrganizationSwitcher collapsed={collapsed} orgSlug={orgSlug} />
+          <OrganizationSwitcher
+            collapsed={collapsed}
+            organizations={organizations}
+            orgSlug={orgSlug}
+          />
         </div>
         <div className="flex-1 overflow-y-auto px-3 pb-4">
           <Navigation collapsed={collapsed} orgSlug={orgSlug} role={role} />
@@ -344,7 +353,7 @@ export function AppShell({ orgSlug, role = "owner", children, user }: AppShellPr
                 <SheetDescription>Navigate Acme Cloud operations.</SheetDescription>
               </SheetHeader>
               <div className="p-4">
-                <OrganizationSwitcher orgSlug={orgSlug} />
+                <OrganizationSwitcher organizations={organizations} orgSlug={orgSlug} />
               </div>
               <div className="overflow-y-auto px-4 pb-6">
                 <Navigation orgSlug={orgSlug} role={role} />

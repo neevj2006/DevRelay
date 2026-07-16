@@ -15,7 +15,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableCors({
     credentials: true,
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     origin: environment.APP_ORIGIN,
   });
   app.getHttpAdapter().all("/api/auth/{*any}", toNodeHandler(authService.auth));

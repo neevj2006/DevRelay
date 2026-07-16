@@ -24,10 +24,20 @@ export const createOrganizationInputSchema = z.strictObject({
   slug: slugSchema,
 });
 
-export const updateOrganizationInputSchema = z.strictObject({
-  name: displayNameSchema.optional(),
-  slug: slugSchema.optional(),
-});
+export const updateOrganizationInputSchema = z
+  .strictObject({
+    name: displayNameSchema.optional(),
+    slug: slugSchema.optional(),
+  })
+  .refine((input) => input.name !== undefined || input.slug !== undefined, {
+    message: "At least one organization field must be provided",
+  });
+
+export const organizationInvitationTokenSchema = z
+  .string()
+  .min(32)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/);
 
 export const createOrganizationInvitationInputSchema = z.strictObject({
   email: z
@@ -39,6 +49,10 @@ export const createOrganizationInvitationInputSchema = z.strictObject({
 
 export const updateOrganizationMemberRoleInputSchema = z.strictObject({
   role: z.enum(organizationRoleValues).exclude(["owner"]),
+});
+
+export const transferOrganizationOwnershipInputSchema = z.strictObject({
+  memberId: uuidSchema,
 });
 
 export const createServiceInputSchema = z.strictObject({
