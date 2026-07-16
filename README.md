@@ -1,5 +1,7 @@
 # DevRelay
 
+[![CI](https://github.com/neevj2006/DevRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/neevj2006/DevRelay/actions/workflows/ci.yml)
+
 DevRelay is a multi-tenant incident response, service monitoring, and public status platform for small engineering teams. It is designed to monitor HTTP services, confirm outages under configurable policies, coordinate incident updates, notify subscribers safely, and preserve a reliable operational history.
 
 ## Project goals
@@ -62,7 +64,7 @@ The default local endpoints are:
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
-The web, API, and worker development processes run together through `pnpm dev`. Stop them with `Ctrl+C`.
+The web, API, and worker development processes run together through `pnpm dev`. This command builds the shared packages first and then starts all three applications without requiring Turborepo's native executable, which can be blocked by Windows Application Control. Stop the processes with `Ctrl+C`.
 
 ## Local infrastructure
 

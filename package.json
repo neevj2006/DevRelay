@@ -10,7 +10,7 @@
     "build": "turbo run build",
     "boundaries": "turbo boundaries",
     "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build",
-    "dev": "turbo run dev",
+    "dev": "pnpm --recursive --filter \"./packages/**\" --workspace-concurrency=1 run build && pnpm --parallel --filter \"./apps/**\" run dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:down": "docker compose down --remove-orphans",
