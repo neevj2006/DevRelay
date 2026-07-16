@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { navigationForRole } from "./app-navigation";
+import { isNavigationPathActive, navigationForRole } from "./app-navigation";
 
 describe("authorization-aware navigation", () => {
   it("shows owners the complete navigation", () => {
@@ -15,5 +15,25 @@ describe("authorization-aware navigation", () => {
     expect(segments).not.toContain("/audit");
     expect(segments).not.toContain("/settings");
     expect(segments).not.toContain("/operations/health");
+  });
+});
+
+describe("active navigation matching", () => {
+  it("keeps sibling subscriber destinations mutually exclusive", () => {
+    expect(isNavigationPathActive("/app/acme/subscribers", "/app/acme/subscribers")).toBe(true);
+    expect(
+      isNavigationPathActive("/app/acme/subscribers/deliveries", "/app/acme/subscribers"),
+    ).toBe(false);
+    expect(
+      isNavigationPathActive(
+        "/app/acme/subscribers/deliveries",
+        "/app/acme/subscribers/deliveries",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps detail routes associated with their parent destination", () => {
+    expect(isNavigationPathActive("/app/acme/services/svc-api", "/app/acme/services")).toBe(true);
+    expect(isNavigationPathActive("/app/acme", "/app/acme")).toBe(true);
   });
 });

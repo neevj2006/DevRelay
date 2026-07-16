@@ -15,7 +15,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { navigationForRole, type OrganizationRole } from "@/components/app-navigation";
+import {
+  isNavigationPathActive,
+  navigationForRole,
+  type OrganizationRole,
+} from "@/components/app-navigation";
 import { Brand } from "@/components/brand";
 import { ThemeSelector } from "@/components/theme-selector";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -44,11 +48,6 @@ type AppShellProps = {
   children: React.ReactNode;
   role?: OrganizationRole;
 };
-
-function isCurrentPath(pathname: string, href: string) {
-  if (href.split("/").length === 3) return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 function OrganizationSwitcher({
   orgSlug,
@@ -104,7 +103,12 @@ function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button aria-label="Open account menu" className="rounded-full" size="icon" variant="ghost">
+        <Button
+          aria-label="Open NA account menu"
+          className="rounded-full"
+          size="icon"
+          variant="ghost"
+        >
           <Avatar className="size-8">
             <AvatarFallback>NA</AvatarFallback>
           </Avatar>
@@ -154,7 +158,7 @@ function Navigation({
           <ul className="space-y-1">
             {group.items.map((item) => {
               const href = `/app/${orgSlug}${item.segment}`;
-              const active = isCurrentPath(pathname, href);
+              const active = isNavigationPathActive(pathname, href);
               const content = (
                 <>
                   <item.icon aria-hidden="true" className="size-4 shrink-0" />

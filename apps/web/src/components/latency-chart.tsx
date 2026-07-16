@@ -26,7 +26,11 @@ export function LatencyChart() {
       title="Latency and check outcomes"
     >
       <ResponsiveContainer height={260} width="100%">
-        <LineChart data={latencySeries} margin={{ left: -12, right: 8, top: 12 }}>
+        <LineChart
+          accessibilityLayer={false}
+          data={latencySeries}
+          margin={{ left: -12, right: 8, top: 12 }}
+        >
           <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" vertical={false} />
           <XAxis
             axisLine={false}
