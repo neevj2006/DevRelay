@@ -13,56 +13,94 @@ DevRelay is a multi-tenant incident response, service monitoring, and public sta
 - Maintain tenant isolation, audit history, availability analytics, and postmortems.
 - Demonstrate reliability through automated tests and fault injection.
 
-## Planned technology stack
+## Repository structure
 
-- Next.js App Router and TypeScript
-- Tailwind CSS
-- NestJS for structured backend services
-- PostgreSQL and Drizzle ORM
-- Redis and BullMQ for the full local worker environment
-- Upstash QStash for the free hosted demonstration
-- Server-Sent Events for live status updates
-- Vitest, Playwright, and Testcontainers
-- Docker Compose for local infrastructure
-- Vercel for the web deployment
-
-## Current status
-
-The repository currently contains the initial Next.js application foundation. Product features will be implemented incrementally through focused pull requests with automated validation.
-
-## Development
-
-Requirements:
-
-- Node.js 20.9 or newer
-- npm
-
-Install dependencies and start the development server:
-
-```bash
-npm install
-npm run dev
+```text
+apps/
+  api/          NestJS API and hosted job receivers
+  web/          Next.js App Router application
+  worker/       Persistent local background workers
+packages/
+  config/       Validated environment contracts
+  contracts/    Shared HTTP and job contracts
+  database/     Database schema and access layer
+  monitoring/   Check execution and policy domain
+  queue/        Shared queue interface and adapters
+  ui/           Shared source-owned components
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Turborepo orchestrates builds, linting, type checks, tests, and development processes across the pnpm workspace.
+
+## Requirements
+
+- Node.js 22.13 or newer
+- pnpm 11.13.1
+- Docker Desktop with Linux containers
+
+Install pnpm if it is not already available:
+
+```powershell
+npm install --global pnpm@11.13.1
+```
+
+## Windows and PowerShell setup
+
+From the repository root:
+
+```powershell
+pnpm install
+Copy-Item .env.example .env
+pnpm infra:up
+pnpm dev
+```
+
+The default local endpoints are:
+
+- Web: [http://localhost:3000](http://localhost:3000)
+- API health: [http://localhost:4000/health](http://localhost:4000/health)
+- Mailpit: [http://localhost:8025](http://localhost:8025)
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+
+The web, API, and worker development processes run together through `pnpm dev`. Stop them with `Ctrl+C`.
+
+## Local infrastructure
+
+```powershell
+pnpm infra:up       # Start PostgreSQL, Redis, and Mailpit and wait for health
+pnpm infra:status   # Inspect container status
+pnpm infra:logs     # Follow service logs
+pnpm infra:down     # Stop containers and preserve data
+pnpm infra:reset    # Stop containers and delete local development volumes
+```
+
+`infra:reset` permanently deletes only the Docker volumes created by this Compose project.
 
 ## Validation
 
-```bash
-npm run lint
-npm run typecheck
-npm run build
+With local infrastructure running, execute every required check with one command:
+
+```powershell
+pnpm check
 ```
 
-Run every available validation step with:
+This verifies formatting, linting, import ordering, package boundaries, strict TypeScript, unit tests, PostgreSQL/Redis integration, and production builds.
 
-```bash
-npm run check
+Individual commands are also available:
+
+```powershell
+pnpm format:check
+pnpm lint
+pnpm boundaries
+pnpm typecheck
+pnpm test
+pnpm test:integration
+pnpm build
 ```
 
 ## Deployment
 
-The application is compatible with Vercel's standard Next.js deployment flow. The production deployment will track `main`, while pull requests will use preview deployments when available.
+The web application is compatible with Vercel's monorepo deployment flow. Production follows `main`; task branches and pull requests may receive free preview deployments. The public demonstration is designed to require no paid plan, payment method, or automatic spending.
 
 ## Budget
 

@@ -1,18 +1,11 @@
-import eslint from "@eslint/js";
 import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
-import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores([
-    "**/.next/**",
-    "**/coverage/**",
-    "**/dist/**",
-    "**/node_modules/**",
-    "next-env.d.ts",
-  ]),
-  eslint.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...nextVitals,
+  ...nextTs,
   {
     files: ["**/*.{js,mjs,ts,tsx}"],
     plugins: {
@@ -23,4 +16,5 @@ export default defineConfig([
       "simple-import-sort/imports": "error",
     },
   },
+  globalIgnores([".next/**", "coverage/**", "dist/**", "next-env.d.ts"]),
 ]);

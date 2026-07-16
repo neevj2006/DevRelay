@@ -1,0 +1,29 @@
+{
+  "name": "@devrelay/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "dotenv -e ../../.env -- next dev",
+    "lint": "eslint src",
+    "start": "next start",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^9.38.0",
+    "eslint-config-next": "16.2.10",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "tailwindcss": "^4.1.14",
+    "vitest": "4.1.10"
+  }
+}
