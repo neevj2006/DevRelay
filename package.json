@@ -2,30 +2,39 @@
   "name": "devrelay",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run build"
+  "packageManager": "pnpm@11.13.1",
+  "engines": {
+    "node": ">=22.13.0"
   },
-  "dependencies": {
-    "next": "16.2.10",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+  "scripts": {
+    "build": "turbo run build",
+    "boundaries": "turbo boundaries",
+    "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build",
+    "dev": "pnpm --recursive --filter \"./packages/**\" --workspace-concurrency=1 run build && pnpm --parallel --filter \"./apps/**\" run dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:down": "docker compose down --remove-orphans",
+    "infra:logs": "docker compose logs --follow",
+    "infra:reset": "docker compose down --volumes --remove-orphans",
+    "infra:status": "docker compose ps",
+    "infra:up": "docker compose up --detach --wait",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  },
-  "overrides": {
-    "postcss": "^8.5.10"
+    "@eslint/js": "^9.38.0",
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.5",
+    "eslint": "^9.38.0",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "pg": "^8.16.3",
+    "prettier": "^3.6.2",
+    "redis": "^5.9.0",
+    "turbo": "2.10.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vitest": "4.1.10"
   }
 }
