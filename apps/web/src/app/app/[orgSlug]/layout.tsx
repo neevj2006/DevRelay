@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
+
 import { AppShell } from "@/components/app-shell";
+import { getServerSession } from "@/lib/auth-server";
 
 export default async function OrganizationLayout({
   children,
@@ -8,5 +11,11 @@ export default async function OrganizationLayout({
   params: Promise<{ orgSlug: string }>;
 }) {
   const { orgSlug } = await params;
-  return <AppShell orgSlug={orgSlug}>{children}</AppShell>;
+  const session = await getServerSession();
+  if (!session) redirect("/sign-in?state=expired-session");
+  return (
+    <AppShell orgSlug={orgSlug} user={{ email: session.user.email, name: session.user.name }}>
+      {children}
+    </AppShell>
+  );
 }

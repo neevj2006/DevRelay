@@ -44,4 +44,33 @@ describe("environment validation", () => {
       }),
     ).toThrow(ZodError);
   });
+
+  it("requires a production auth secret and paired GitHub OAuth credentials", () => {
+    expect(() =>
+      parseApiEnvironment({
+        ...sharedEnvironment,
+        NODE_ENV: "production",
+      }),
+    ).toThrow(ZodError);
+
+    expect(() =>
+      parseApiEnvironment({
+        ...sharedEnvironment,
+        GITHUB_CLIENT_ID: "client-id",
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it("treats empty optional OAuth values as unconfigured", () => {
+    expect(
+      parseApiEnvironment({
+        ...sharedEnvironment,
+        GITHUB_CLIENT_ID: "",
+        GITHUB_CLIENT_SECRET: "",
+      }),
+    ).toMatchObject({
+      GITHUB_CLIENT_ID: undefined,
+      GITHUB_CLIENT_SECRET: undefined,
+    });
+  });
 });
