@@ -78,3 +78,9 @@ export function navigationForRole(role: OrganizationRole) {
     .map((group) => ({ ...group, items: group.items.filter((item) => item.roles.includes(role)) }))
     .filter((group) => group.items.length > 0);
 }
+
+export function isNavigationPathActive(pathname: string, href: string) {
+  if (href.split("/").length === 3) return pathname === href;
+  if (href.endsWith("/subscribers")) return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
