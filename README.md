@@ -98,14 +98,6 @@ pnpm test:integration
 pnpm build
 ```
 
-## Deployment
-
-The web application is compatible with Vercel's monorepo deployment flow. Production follows `main`; task branches and pull requests may receive free preview deployments. The public demonstration is designed to require no paid plan, payment method, or automatic spending.
-
-## Budget
-
-The public portfolio deployment is designed to remain within free service tiers. Paid infrastructure, usage-based billing, and automatic upgrades are outside the project scope unless explicitly approved.
-
 ## License
 
 No license has been selected yet. All rights are reserved until a license is added.
