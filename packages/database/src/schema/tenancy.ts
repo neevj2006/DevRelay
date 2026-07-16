@@ -1,3 +1,4 @@
+import { type OrganizationRole, organizationRoleValues } from "@devrelay/contracts";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -17,9 +18,6 @@ import {
   tenantOrganizationColumn,
 } from "../conventions.js";
 import { users } from "./auth.js";
-
-export const organizationRoleValues = ["owner", "admin", "member"] as const;
-export type OrganizationRole = (typeof organizationRoleValues)[number];
 
 export const organizationPermissions = [
   "organization:manage",

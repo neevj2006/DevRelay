@@ -1,3 +1,13 @@
+import {
+  checkOutcomeValues,
+  checkWindowStatusValues,
+  monitorImpactValues,
+  monitorMethodValues,
+  monitorStatusValues,
+  serviceStateValues,
+  workerDeploymentModeValues,
+  workerQueueAdapterValues,
+} from "@devrelay/contracts";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -29,53 +39,20 @@ const instant = {
   withTimezone: true,
 } as const;
 
-export const serviceStateValues = [
-  "unknown",
-  "operational",
-  "degraded_performance",
-  "partial_outage",
-  "major_outage",
-  "under_maintenance",
-] as const;
-export type ServiceState = (typeof serviceStateValues)[number];
 export const serviceState = pgEnum("service_state", serviceStateValues);
 
-export const monitorStatusValues = ["pending", "active", "paused", "archived"] as const;
-export type MonitorStatus = (typeof monitorStatusValues)[number];
 export const monitorStatus = pgEnum("monitor_status", monitorStatusValues);
 
-export const monitorMethodValues = ["GET", "HEAD"] as const;
-export type MonitorMethod = (typeof monitorMethodValues)[number];
 export const monitorMethod = pgEnum("monitor_method", monitorMethodValues);
 
-export const monitorImpactValues = [
-  "degraded_performance",
-  "partial_outage",
-  "major_outage",
-] as const;
-export type MonitorImpact = (typeof monitorImpactValues)[number];
 export const monitorImpact = pgEnum("monitor_impact", monitorImpactValues);
 
-export const checkOutcomeValues = [
-  "success",
-  "failure",
-  "timeout",
-  "rejected_target",
-  "execution_error",
-] as const;
-export type CheckOutcome = (typeof checkOutcomeValues)[number];
 export const checkOutcome = pgEnum("check_outcome", checkOutcomeValues);
 
-export const checkWindowStatusValues = ["pending", "claimed", "completed", "expired"] as const;
-export type CheckWindowStatus = (typeof checkWindowStatusValues)[number];
 export const checkWindowStatus = pgEnum("check_window_status", checkWindowStatusValues);
 
-export const workerDeploymentModeValues = ["local", "hosted"] as const;
-export type WorkerDeploymentMode = (typeof workerDeploymentModeValues)[number];
 export const workerDeploymentMode = pgEnum("worker_deployment_mode", workerDeploymentModeValues);
 
-export const workerQueueAdapterValues = ["bullmq", "qstash"] as const;
-export type WorkerQueueAdapter = (typeof workerQueueAdapterValues)[number];
 export const workerQueueAdapter = pgEnum("worker_queue_adapter", workerQueueAdapterValues);
 
 export const services = pgTable(

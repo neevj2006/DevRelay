@@ -1,6 +1,7 @@
+import { organizationRoleValues } from "@devrelay/contracts";
 import { describe, expect, it } from "vitest";
 
-import { organizationRoleValues, permissionsByRole } from "./tenancy.js";
+import { permissionsByRole } from "./tenancy.js";
 
 describe("organization role permissions", () => {
   it("defines permissions for every persisted role", () => {
