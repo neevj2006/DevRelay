@@ -1,6 +1,11 @@
 import { parseApiEnvironment } from "@devrelay/config";
 import { type QueueJob } from "@devrelay/contracts";
-import { MonitorCheckExecutor, MonitorScheduler } from "@devrelay/execution";
+import {
+  MonitorCheckExecutor,
+  MonitoringFreshnessDetector,
+  MonitorScheduler,
+  PolicyEngine,
+} from "@devrelay/execution";
 import { QStashJobQueue } from "@devrelay/queue";
 import { Injectable, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { Receiver } from "@upstash/qstash";
@@ -41,6 +46,7 @@ export class QStashService {
 
   async dispatchDue(): Promise<{ claimed: number; paused: boolean }> {
     const queue = this.requireQueue();
+    await new MonitoringFreshnessDetector(this.database.client, queue).inspect();
     return new MonitorScheduler(this.database.client, queue, {
       batchSize: this.environment.QSTASH_DISPATCH_BATCH_SIZE,
       dailyMessageLimit: this.environment.QSTASH_DAILY_MESSAGE_LIMIT,
@@ -52,6 +58,9 @@ export class QStashService {
   async executeJob(value: unknown) {
     const queue = this.requireQueue();
     const job = value as QueueJob;
+    if (job.name === "policy.evaluate") {
+      return new PolicyEngine(this.database.client).evaluate(value);
+    }
     if (job.name !== "monitor.check") {
       throw new ServiceUnavailableException(
         `Hosted handler for ${String(job.name)} is not active yet`,

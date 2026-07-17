@@ -1,6 +1,8 @@
 import {
+  cancelServiceStateOverrideInputSchema,
   createMonitorInputSchema,
   createServiceInputSchema,
+  createServiceStateOverrideInputSchema,
   slugSchema,
   updateMonitorInputSchema,
   updateServiceInputSchema,
@@ -73,6 +75,36 @@ export class ServiceMonitorController {
       request.auth.user.id,
       parseRequestBody(slugSchema, slug),
       parseRequestBody(uuidSchema, serviceId),
+    );
+  }
+
+  @Post("services/:serviceId/state-override")
+  createStateOverride(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationSlug") slug: string,
+    @Param("serviceId") serviceId: string,
+    @Body() body: unknown,
+  ) {
+    return this.resources.createStateOverride(
+      request.auth.user.id,
+      parseRequestBody(slugSchema, slug),
+      parseRequestBody(uuidSchema, serviceId),
+      parseRequestBody(createServiceStateOverrideInputSchema, body),
+    );
+  }
+
+  @Delete("services/:serviceId/state-override")
+  cancelStateOverride(
+    @Req() request: AuthenticatedRequest,
+    @Param("organizationSlug") slug: string,
+    @Param("serviceId") serviceId: string,
+    @Body() body: unknown,
+  ) {
+    return this.resources.cancelStateOverride(
+      request.auth.user.id,
+      parseRequestBody(slugSchema, slug),
+      parseRequestBody(uuidSchema, serviceId),
+      parseRequestBody(cancelServiceStateOverrideInputSchema, body),
     );
   }
 

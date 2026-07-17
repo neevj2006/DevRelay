@@ -1,13 +1,17 @@
 import { type WorkerEnvironment } from "@devrelay/config";
 import { type QueueJob } from "@devrelay/contracts";
-import { MonitorCheckExecutor } from "@devrelay/execution";
+import { MonitorCheckExecutor, PolicyEngine } from "@devrelay/execution";
 import { bullMqQueueName, classifyJobError, validateQueueJob } from "@devrelay/queue";
 import { type ConnectionOptions, type Processor, UnrecoverableError, Worker } from "bullmq";
 
 export class BullMqWorkerRuntime {
   private readonly workers: Worker<QueueJob>[];
 
-  constructor(environment: WorkerEnvironment, executor: MonitorCheckExecutor) {
+  constructor(
+    environment: WorkerEnvironment,
+    executor: MonitorCheckExecutor,
+    policyEngine: PolicyEngine,
+  ) {
     const connection: ConnectionOptions = { url: environment.REDIS_URL! };
     const create = (name: QueueJob["name"], processor: Processor<QueueJob>) =>
       new Worker<QueueJob>(bullMqQueueName(name), processor, {
@@ -30,7 +34,7 @@ export class BullMqWorkerRuntime {
           throw error;
         }
       }),
-      create("policy.evaluate", async (bullJob) => validateQueueJob(bullJob.data)),
+      create("policy.evaluate", async (bullJob) => policyEngine.evaluate(bullJob.data)),
       create("notification.deliver", async (bullJob) => validateQueueJob(bullJob.data)),
       create("outbox.dispatch", async (bullJob) => validateQueueJob(bullJob.data)),
       create("availability.aggregate", async (bullJob) => validateQueueJob(bullJob.data)),

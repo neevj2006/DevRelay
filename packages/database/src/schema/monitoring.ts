@@ -3,6 +3,7 @@ import {
   checkWindowStatusValues,
   monitorImpactValues,
   monitorMethodValues,
+  monitorPolicyStateValues,
   monitorStatusValues,
   serviceStateValues,
   workerDeploymentModeValues,
@@ -31,6 +32,7 @@ import {
   softDeleteColumn,
   tenantOrganizationColumn,
 } from "../conventions.js";
+import { users } from "./auth.js";
 import { organizations } from "./tenancy.js";
 
 const instant = {
@@ -50,6 +52,8 @@ export const monitorImpact = pgEnum("monitor_impact", monitorImpactValues);
 export const checkOutcome = pgEnum("check_outcome", checkOutcomeValues);
 
 export const checkWindowStatus = pgEnum("check_window_status", checkWindowStatusValues);
+
+export const monitorPolicyState = pgEnum("monitor_policy_state", monitorPolicyStateValues);
 
 export const workerDeploymentMode = pgEnum("worker_deployment_mode", workerDeploymentModeValues);
 
@@ -331,5 +335,157 @@ export const workerHeartbeats = pgTable(
     index("worker_heartbeats_heartbeat_at_idx").on(table.heartbeatAt),
     check("worker_heartbeats_worker_key_length", sql`length(${table.workerKey}) BETWEEN 1 AND 200`),
     check("worker_heartbeats_time_order", sql`${table.heartbeatAt} >= ${table.startedAt}`),
+  ],
+);
+
+export const monitorPolicyEvaluations = pgTable(
+  "monitor_policy_evaluations",
+  {
+    id: primaryKeyColumn(),
+    organizationId: tenantOrganizationColumn().references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    monitorId: uuid("monitor_id").notNull(),
+    serviceId: uuid("service_id").notNull(),
+    state: monitorPolicyState("state").default("unknown").notNull(),
+    consecutiveFailures: integer("consecutive_failures").default(0).notNull(),
+    consecutiveSuccesses: integer("consecutive_successes").default(0).notNull(),
+    latestScheduledAt: timestamp("latest_scheduled_at", instant),
+    latestOutcome: checkOutcome("latest_outcome"),
+    freshUntil: timestamp("fresh_until", instant),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().default({}).notNull(),
+    evaluatedAt: timestamp("evaluated_at", instant).defaultNow().notNull(),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.monitorId],
+      foreignColumns: [monitors.organizationId, monitors.id],
+      name: "monitor_policy_evaluations_organization_monitor_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.serviceId],
+      foreignColumns: [services.organizationId, services.id],
+      name: "monitor_policy_evaluations_organization_service_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("monitor_policy_evaluations_monitor_unique").on(
+      table.organizationId,
+      table.monitorId,
+    ),
+    index("monitor_policy_evaluations_service_idx").on(
+      table.organizationId,
+      table.serviceId,
+      table.state,
+    ),
+    check(
+      "monitor_policy_evaluations_counters_nonnegative",
+      sql`${table.consecutiveFailures} >= 0 AND ${table.consecutiveSuccesses} >= 0`,
+    ),
+    check(
+      "monitor_policy_evaluations_evidence_limit",
+      sql`octet_length(${table.evidence}::text) <= 8192`,
+    ),
+  ],
+);
+
+export const serviceStateTransitions = pgTable(
+  "service_state_transitions",
+  {
+    id: primaryKeyColumn(),
+    organizationId: tenantOrganizationColumn().references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    serviceId: uuid("service_id").notNull(),
+    fromState: serviceState("from_state").notNull(),
+    toState: serviceState("to_state").notNull(),
+    evidenceState: serviceState("evidence_state").notNull(),
+    actorType: text("actor_type").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    source: text("source").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().default({}).notNull(),
+    occurredAt: timestamp("occurred_at", instant).defaultNow().notNull(),
+    createdAt: timestamp("created_at", instant).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.serviceId],
+      foreignColumns: [services.organizationId, services.id],
+      name: "service_state_transitions_organization_service_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("service_state_transitions_idempotency_unique").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+    index("service_state_transitions_timeline_idx").on(
+      table.organizationId,
+      table.serviceId,
+      table.occurredAt.desc(),
+      table.id,
+    ),
+    check(
+      "service_state_transitions_actor_consistent",
+      sql`(${table.actorType} = 'user' AND ${table.actorUserId} IS NOT NULL) OR (${table.actorType} IN ('worker','system') AND ${table.actorUserId} IS NULL)`,
+    ),
+    check(
+      "service_state_transitions_reason_length",
+      sql`length(${table.reason}) BETWEEN 1 AND 500`,
+    ),
+    check(
+      "service_state_transitions_evidence_limit",
+      sql`octet_length(${table.evidence}::text) <= 16384`,
+    ),
+  ],
+);
+
+export const serviceStateOverrides = pgTable(
+  "service_state_overrides",
+  {
+    id: primaryKeyColumn(),
+    organizationId: tenantOrganizationColumn().references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    serviceId: uuid("service_id").notNull(),
+    declaredState: serviceState("declared_state").notNull(),
+    reason: text("reason").notNull(),
+    startsAt: timestamp("starts_at", instant).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", instant).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    cancelledAt: timestamp("cancelled_at", instant),
+    cancelledByUserId: uuid("cancelled_by_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    ...auditTimestamps(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId, table.serviceId],
+      foreignColumns: [services.organizationId, services.id],
+      name: "service_state_overrides_organization_service_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("service_state_overrides_one_uncancelled_unique")
+      .on(table.organizationId, table.serviceId)
+      .where(sql`${table.cancelledAt} IS NULL`),
+    index("service_state_overrides_expiry_idx").on(table.expiresAt),
+    check(
+      "service_state_overrides_allowed_state",
+      sql`${table.declaredState} IN ('operational','degraded_performance','partial_outage','major_outage')`,
+    ),
+    check("service_state_overrides_time_order", sql`${table.expiresAt} > ${table.startsAt}`),
+    check(
+      "service_state_overrides_max_duration",
+      sql`${table.expiresAt} <= ${table.startsAt} + interval '24 hours'`,
+    ),
+    check(
+      "service_state_overrides_reason_length",
+      sql`length(trim(${table.reason})) BETWEEN 1 AND 500`,
+    ),
+    check(
+      "service_state_overrides_cancellation_consistent",
+      sql`(${table.cancelledAt} IS NULL AND ${table.cancelledByUserId} IS NULL) OR (${table.cancelledAt} IS NOT NULL AND ${table.cancelledByUserId} IS NOT NULL)`,
+    ),
   ],
 );

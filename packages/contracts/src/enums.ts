@@ -22,6 +22,15 @@ export const checkOutcomeValues = [
   "execution_error",
 ] as const;
 export const checkWindowStatusValues = ["pending", "claimed", "completed", "expired"] as const;
+export const monitorPolicyStateValues = [
+  "unknown",
+  "healthy",
+  "failing",
+  "unhealthy",
+  "recovering",
+  "stale",
+  "maintenance",
+] as const;
 export const workerDeploymentModeValues = ["local", "hosted"] as const;
 export const workerQueueAdapterValues = ["bullmq", "qstash"] as const;
 export const incidentLifecycleValues = [
@@ -94,6 +103,7 @@ export type MonitorMethod = (typeof monitorMethodValues)[number];
 export type MonitorImpact = (typeof monitorImpactValues)[number];
 export type CheckOutcome = (typeof checkOutcomeValues)[number];
 export type CheckWindowStatus = (typeof checkWindowStatusValues)[number];
+export type MonitorPolicyState = (typeof monitorPolicyStateValues)[number];
 export type WorkerDeploymentMode = (typeof workerDeploymentModeValues)[number];
 export type WorkerQueueAdapter = (typeof workerQueueAdapterValues)[number];
 export type IncidentLifecycle = (typeof incidentLifecycleValues)[number];
