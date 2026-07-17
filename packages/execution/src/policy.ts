@@ -11,6 +11,8 @@ import { type DatabaseClient } from "@devrelay/database";
 import { type JobQueue, PermanentJobError, validateQueueJob } from "@devrelay/queue";
 import type { PoolClient } from "pg";
 
+import { reconcileAutomaticIncident } from "./incident.js";
+
 type PolicyRow = {
   failure_impact: MonitorImpact;
   failure_threshold: number;
@@ -109,8 +111,18 @@ export class PolicyEngine {
         sourceId: job.id,
         now,
       });
+      const incident = await reconcileAutomaticIncident(client, {
+        evidenceState: service.evidenceState,
+        monitorId: policy.monitor_id,
+        now,
+        organizationId: policy.organization_id,
+        policyState: evaluation.state,
+        scheduledAt: incomingAt,
+        serviceId: policy.service_id,
+        servicePresentationState: service.currentState,
+      });
       await client.query("COMMIT");
-      return { ignored: false, monitorState: evaluation.state, service };
+      return { ignored: false, incident, monitorState: evaluation.state, service };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

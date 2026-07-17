@@ -1,7 +1,9 @@
 "use client";
 
 import { Lock, Megaphone, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,11 +18,51 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-export function IncidentComposers() {
-  const [publicUpdate, setPublicUpdate] = useState(
-    "We have shifted traffic and are seeing recovery. We continue to monitor.",
-  );
+export function IncidentComposers({
+  incidentId,
+  lifecycle,
+  orgSlug,
+}: {
+  incidentId: string;
+  lifecycle: string;
+  orgSlug: string;
+}) {
+  const router = useRouter();
+  const [publicUpdate, setPublicUpdate] = useState("");
   const [privateNote, setPrivateNote] = useState("");
+  async function addPrivateNote() {
+    const response = await fetch(
+      `/api/backend/organizations/${orgSlug}/incidents/${incidentId}/private-notes`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: privateNote, idempotencyKey: crypto.randomUUID() }),
+      },
+    );
+    if (!response.ok) return toast.error("The private note could not be added.");
+    setPrivateNote("");
+    toast.success("Private note added");
+    router.refresh();
+  }
+  async function publish() {
+    const response = await fetch(
+      `/api/backend/organizations/${orgSlug}/incidents/${incidentId}/public-updates`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          body: publicUpdate,
+          idempotencyKey: crypto.randomUUID(),
+          lifecycle,
+          publicationConfirmed: true,
+        }),
+      },
+    );
+    if (!response.ok) return toast.error("The public update could not be published.");
+    setPublicUpdate("");
+    toast.success("Public update published");
+    router.refresh();
+  }
   return (
     <section aria-labelledby="incident-composers-title" className="space-y-4">
       <h2 className="sr-only" id="incident-composers-title">
@@ -72,7 +114,7 @@ export function IncidentComposers() {
                   <Button variant="outline">Keep editing</Button>
                 </DialogClose>
                 <DialogClose asChild>
-                  <Button>
+                  <Button onClick={publish}>
                     <Send aria-hidden="true" />
                     Publish update
                   </Button>
@@ -102,7 +144,7 @@ export function IncidentComposers() {
         />
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">{privateNote.length}/2000</span>
-          <Button disabled={!privateNote.trim()} variant="secondary">
+          <Button disabled={!privateNote.trim()} onClick={addPrivateNote} variant="secondary">
             <Lock aria-hidden="true" />
             Add private note
           </Button>

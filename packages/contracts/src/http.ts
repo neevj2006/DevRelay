@@ -149,6 +149,17 @@ export const transitionIncidentInputSchema = z.strictObject({
   toLifecycle: z.enum(incidentLifecycleValues),
 });
 
+export const updateIncidentInputSchema = z
+  .strictObject({
+    affectedServiceIds: z.array(uuidSchema).min(1).max(50).optional(),
+    publicTitle: z.string().trim().min(1).max(240).nullable().optional(),
+    severity: z.enum(incidentSeverityValues).optional(),
+    title: z.string().trim().min(1).max(240).optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, {
+    message: "At least one incident field must be provided",
+  });
+
 export const createPublicIncidentUpdateInputSchema = z.strictObject({
   body: z.string().trim().min(1).max(5000),
   idempotencyKey: idempotencyKeySchema,
@@ -298,6 +309,10 @@ export type CreateMonitorInput = z.infer<typeof createMonitorInputSchema>;
 export type UpdateServiceInput = z.infer<typeof updateServiceInputSchema>;
 export type UpdateMonitorInput = z.infer<typeof updateMonitorInputSchema>;
 export type CreateManualIncidentInput = z.infer<typeof createManualIncidentInputSchema>;
+export type UpdateIncidentInput = z.infer<typeof updateIncidentInputSchema>;
+export type TransitionIncidentInput = z.infer<typeof transitionIncidentInputSchema>;
+export type CreatePublicIncidentUpdateInput = z.infer<typeof createPublicIncidentUpdateInputSchema>;
+export type CreatePrivateIncidentNoteInput = z.infer<typeof createPrivateIncidentNoteInputSchema>;
 export type CreateSubscriptionInput = z.infer<typeof createSubscriptionInputSchema>;
 export type ServiceResponse = z.infer<typeof serviceResponseSchema>;
 export type MonitorResponse = z.infer<typeof monitorResponseSchema>;
