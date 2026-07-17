@@ -4,7 +4,7 @@ import { isNavigationPathActive, navigationForRole } from "./app-navigation";
 
 describe("authorization-aware navigation", () => {
   it("shows owners the complete navigation", () => {
-    expect(navigationForRole("owner").flatMap((group) => group.items)).toHaveLength(11);
+    expect(navigationForRole("owner").flatMap((group) => group.items)).toHaveLength(12);
   });
 
   it("does not expose administrative destinations to members", () => {
@@ -14,6 +14,7 @@ describe("authorization-aware navigation", () => {
     expect(segments).not.toContain("/members");
     expect(segments).not.toContain("/settings");
     expect(segments).not.toContain("/operations/health");
+    expect(segments).not.toContain("/settings/api-keys");
     expect(segments).toContain("/audit");
   });
 
@@ -22,6 +23,7 @@ describe("authorization-aware navigation", () => {
       group.items.map((item) => item.segment),
     );
     expect(adminSegments).not.toContain("/settings");
+    expect(adminSegments).toContain("/settings/api-keys");
   });
 });
 

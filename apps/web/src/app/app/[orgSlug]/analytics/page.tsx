@@ -1,74 +1,115 @@
-import { CalendarDays, Download } from "lucide-react";
-
-import { KpiCard } from "@/components/kpi-card";
-import { LatencyChart } from "@/components/latency-chart";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
+import { ResponsiveDataTable } from "@/components/responsive-data-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-export default function AnalyticsPage() {
+import { apiRequest } from "@/lib/auth-server";
+type ServiceMetric = {
+  id: string;
+  name: string;
+  expectedChecks: number;
+  completedChecks: number;
+  missingChecks: number;
+  availabilityBasisPoints: number | null;
+  errorBudgetChecksRemaining: number | null;
+  latencyP50Milliseconds: number | null;
+  latencyP95Milliseconds: number | null;
+};
+export default async function AnalyticsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const { orgSlug } = await params;
+  const query = await searchParams;
+  const to = query.to ?? new Date().toISOString().slice(0, 10);
+  const fromDate = new Date(to);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 29);
+  const from = query.from ?? fromDate.toISOString().slice(0, 10);
+  const response = await apiRequest(
+    `/organizations/${orgSlug}/operations/analytics?from=${from}&to=${to}`,
+  );
+  const data = response.ok
+    ? ((await response.json()) as { formula: string; timezone: string; services: ServiceMetric[] })
+    : { formula: "Unavailable", timezone: "UTC", services: [] };
   return (
     <div className="space-y-8">
       <PageHeader
-        actions={
-          <>
-            <Button variant="outline">
-              <CalendarDays aria-hidden="true" />
-              Last 30 days
-            </Button>
-            <Button variant="outline">
-              <Download aria-hidden="true" />
-              Export CSV
-            </Button>
-          </>
-        }
-        description="Availability, latency, check completion, and incident impact from durable aggregates."
         title="Analytics"
+        description="Availability and latency from durable check evidence."
       />
-      <section
-        aria-label="Availability metrics"
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        <KpiCard detail="+0.03% vs prior period" label="Availability" trend="up" value="99.92%" />
-        <KpiCard detail="API Gateway" label="Median latency" value="214 ms" />
-        <KpiCard detail="3.8 minutes" label="Incident minutes" trend="down" value="84" />
-        <KpiCard detail="432,916 total" label="Check completion" trend="up" value="99.98%" />
-      </section>
-      <LatencyChart />
       <Card>
         <CardHeader>
-          <CardTitle>Availability by service</CardTitle>
-          <CardDescription>Thirty-day rollup with incident minutes.</CardDescription>
+          <CardTitle>Range and evidence policy</CardTitle>
+          <CardDescription>
+            {from} through {to} · {data.timezone}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-5">
-            {[
-              { name: "Customer dashboard", value: "99.99%", width: "99.99%" },
-              { name: "Webhook delivery", value: "99.97%", width: "99.97%" },
-              { name: "Checkout", value: "99.91%", width: "99.91%" },
-              { name: "API Gateway", value: "99.82%", width: "99.82%" },
-            ].map((item) => (
-              <div key={item.name}>
-                <div className="mb-2 flex justify-between gap-3 text-sm">
-                  <span>{item.name}</span>
-                  <span className="font-mono tabular-nums">{item.value}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    aria-hidden="true"
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: item.width }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-5 text-xs text-muted-foreground">
-            Table-equivalent values are included alongside every bar; color is not the sole
-            indicator.
+          <form className="flex flex-wrap gap-3">
+            <label className="text-sm">
+              From{" "}
+              <input
+                className="ml-2 rounded border bg-card p-2"
+                defaultValue={from}
+                name="from"
+                type="date"
+              />
+            </label>
+            <label className="text-sm">
+              To{" "}
+              <input
+                className="ml-2 rounded border bg-card p-2"
+                defaultValue={to}
+                name="to"
+                type="date"
+              />
+            </label>
+            <button className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground">
+              Apply
+            </button>
+          </form>
+          <p className="mt-4 text-xs text-muted-foreground">
+            {data.formula}. Missing evidence is always shown and never hidden in the percentage.
           </p>
         </CardContent>
       </Card>
+      <ResponsiveDataTable
+        caption="Availability by service with sample counts and missing evidence"
+        columns={[
+          { id: "service", header: "Service", cell: (r) => r.name },
+          {
+            id: "availability",
+            header: "Availability",
+            cell: (r) =>
+              r.availabilityBasisPoints === null
+                ? "No completed samples"
+                : `${(r.availabilityBasisPoints / 100).toFixed(2)}%`,
+          },
+          {
+            id: "samples",
+            header: "Completed / expected",
+            cell: (r) => `${r.completedChecks ?? 0} / ${r.expectedChecks ?? 0}`,
+          },
+          { id: "missing", header: "Missing", cell: (r) => String(r.missingChecks ?? 0) },
+          {
+            id: "latency",
+            header: "Latency p50 / p95",
+            cell: (r) =>
+              `${r.latencyP50Milliseconds ?? "—"} / ${r.latencyP95Milliseconds ?? "—"} ms`,
+          },
+          {
+            id: "budget",
+            header: "99.90% budget",
+            cell: (r) =>
+              r.errorBudgetChecksRemaining === null
+                ? "—"
+                : `${r.errorBudgetChecksRemaining} checks`,
+          },
+        ]}
+        getRowKey={(r) => r.id}
+        rows={data.services}
+      />
     </div>
   );
 }

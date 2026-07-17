@@ -1,4 +1,5 @@
 import { Lock, Megaphone, RadioTower } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { IncidentLifecycleBadge, IncidentSeverityBadge } from "@/components/incident-badges";
@@ -6,6 +7,7 @@ import { IncidentComposers } from "@/components/incident-composers";
 import { IncidentTransitionActions } from "@/components/incident-transition-actions";
 import { PageHeader } from "@/components/page-header";
 import { Timeline, TimelineEvent } from "@/components/timeline";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest } from "@/lib/auth-server";
 
@@ -69,11 +71,19 @@ export default async function IncidentConsolePage({
     <div className="space-y-6">
       <PageHeader
         actions={
-          <IncidentTransitionActions
-            incidentId={incident.id}
-            lifecycle={incident.lifecycle}
-            orgSlug={orgSlug}
-          />
+          <>
+            <IncidentTransitionActions
+              incidentId={incident.id}
+              lifecycle={incident.lifecycle}
+              orgSlug={orgSlug}
+            />
+            {(incident.lifecycle === "resolved" ||
+              incident.lifecycle === "postmortem_published") && (
+              <Button asChild variant="outline">
+                <Link href={`/app/${orgSlug}/incidents/${incident.id}/postmortem`}>Postmortem</Link>
+              </Button>
+            )}
+          </>
         }
         description={`${incident.services.map((service) => service.name).join(" and ")} · ${incident.source.replaceAll("_", " ")}`}
         title={incident.title}

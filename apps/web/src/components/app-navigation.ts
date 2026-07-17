@@ -4,6 +4,7 @@ import {
   ChartNoAxesCombined,
   ClipboardList,
   Gauge,
+  KeyRound,
   type LucideIcon,
   RadioTower,
   ScrollText,
@@ -68,6 +69,12 @@ export const applicationNavigation: ReadonlyArray<NavigationGroup> = [
     items: [
       { label: "Members & roles", segment: "/members", icon: Users, roles: administrativeRoles },
       { label: "Audit log", segment: "/audit", icon: ScrollText, roles: allRoles },
+      {
+        label: "API keys",
+        segment: "/settings/api-keys",
+        icon: KeyRound,
+        roles: administrativeRoles,
+      },
       { label: "Settings", segment: "/settings", icon: Settings, roles: ["owner"] },
     ],
   },
