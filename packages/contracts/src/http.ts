@@ -73,6 +73,16 @@ export const updateServiceInputSchema = z
     message: "At least one service field must be provided",
   });
 
+export const createServiceStateOverrideInputSchema = z.strictObject({
+  expiresAt: utcDateTimeSchema,
+  reason: z.string().trim().min(1).max(500),
+  state: z.enum(serviceStateValues).exclude(["unknown", "under_maintenance"]),
+});
+
+export const cancelServiceStateOverrideInputSchema = z.strictObject({
+  reason: z.string().trim().min(1).max(500),
+});
+
 export const acceptedStatusCodeRangeSchema = z
   .strictObject({
     from: z.number().int().min(100).max(599),
@@ -283,6 +293,7 @@ export const publicStatusPageResponseSchema = z.strictObject({
 
 export type CreateOrganizationInput = z.infer<typeof createOrganizationInputSchema>;
 export type CreateServiceInput = z.infer<typeof createServiceInputSchema>;
+export type CreateServiceStateOverrideInput = z.infer<typeof createServiceStateOverrideInputSchema>;
 export type CreateMonitorInput = z.infer<typeof createMonitorInputSchema>;
 export type UpdateServiceInput = z.infer<typeof updateServiceInputSchema>;
 export type UpdateMonitorInput = z.infer<typeof updateMonitorInputSchema>;

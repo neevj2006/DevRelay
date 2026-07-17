@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   CreateMonitorInput,
   CreateServiceInput,
+  CreateServiceStateOverrideInput,
   OrganizationRole,
   UpdateMonitorInput,
   UpdateServiceInput,
@@ -111,7 +112,24 @@ export class ServiceMonitorService {
       WHERE affected.organization_id = ${context.organizationId} AND affected.service_id = ${serviceId}
       ORDER BY incident.started_at DESC LIMIT 10
     `);
-    return { ...result.rows[0], incidents: incidents.rows, monitors };
+    const override = await this.databaseService.database.execute(sql`
+      SELECT id, declared_state AS state, reason, starts_at AS "startsAt", expires_at AS "expiresAt"
+      FROM service_state_overrides WHERE organization_id = ${context.organizationId} AND service_id = ${serviceId}
+        AND cancelled_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 1
+    `);
+    const stateHistory = await this.databaseService.database.execute(sql`
+      SELECT id, from_state AS "fromState", to_state AS "toState", evidence_state AS "evidenceState",
+        actor_type AS "actorType", reason, source, occurred_at AS "occurredAt"
+      FROM service_state_transitions WHERE organization_id = ${context.organizationId} AND service_id = ${serviceId}
+      ORDER BY occurred_at DESC, id DESC LIMIT 25
+    `);
+    return {
+      ...result.rows[0],
+      incidents: incidents.rows,
+      monitors,
+      stateHistory: stateHistory.rows,
+      stateOverride: override.rows[0] ?? null,
+    };
   }
 
   async createService(userId: string, slug: string, input: CreateServiceInput) {
@@ -196,6 +214,127 @@ export class ServiceMonitorService {
         { historyPreserved: true },
       );
       return { archived: true, id: serviceId };
+    });
+  }
+
+  async createStateOverride(
+    userId: string,
+    slug: string,
+    serviceId: string,
+    input: CreateServiceStateOverrideInput,
+  ) {
+    const context = await this.manageContext(userId, slug);
+    const now = new Date();
+    const expiresAt = new Date(input.expiresAt);
+    if (expiresAt <= now || expiresAt.getTime() > now.getTime() + 86_400_000) {
+      throw new BadRequestException(
+        "Override expiry must be in the future and no more than 24 hours away",
+      );
+    }
+    return this.databaseService.database.transaction(async (transaction) => {
+      const service = await transaction.execute<{ currentState: string }>(sql`
+        SELECT current_state AS "currentState" FROM services
+        WHERE id = ${serviceId} AND organization_id = ${context.organizationId} AND deleted_at IS NULL FOR UPDATE
+      `);
+      if (!service.rows[0]) throw new NotFoundException("Service not found");
+      await transaction.execute(sql`
+        UPDATE service_state_overrides SET cancelled_at = ${now}, cancelled_by_user_id = ${userId}, updated_at = now()
+        WHERE organization_id = ${context.organizationId} AND service_id = ${serviceId} AND cancelled_at IS NULL
+      `);
+      const id = randomUUID();
+      await transaction.execute(sql`
+        INSERT INTO service_state_overrides
+          (id, organization_id, service_id, declared_state, reason, starts_at, expires_at, created_by_user_id)
+        VALUES (${id}, ${context.organizationId}, ${serviceId}, ${input.state}, ${input.reason}, ${now}, ${expiresAt}, ${userId})
+      `);
+      await transaction.execute(sql`
+        UPDATE services SET current_state = ${input.state}, state_changed_at = ${now}, updated_at = now(), version = version + 1
+        WHERE id = ${serviceId} AND organization_id = ${context.organizationId}
+      `);
+      await transaction.execute(sql`
+        INSERT INTO service_state_transitions
+          (organization_id, service_id, from_state, to_state, evidence_state, actor_type, actor_user_id,
+           reason, source, idempotency_key, evidence, occurred_at)
+        SELECT ${context.organizationId}, ${serviceId}, ${service.rows[0].currentState}, ${input.state}, evidence_state,
+          'user', ${userId}, ${input.reason}, 'manual_override', ${`override:${id}:created`},
+          ${JSON.stringify({ expiresAt: expiresAt.toISOString(), overrideId: id })}::jsonb, ${now}
+        FROM services WHERE id = ${serviceId} AND organization_id = ${context.organizationId}
+      `);
+      await this.audit(
+        transaction,
+        userId,
+        context.organizationId,
+        "service.state_override_created",
+        "service",
+        serviceId,
+        {
+          expiresAt: expiresAt.toISOString(),
+          overrideId: id,
+          reason: input.reason,
+          state: input.state,
+        },
+      );
+      return { expiresAt, id, reason: input.reason, state: input.state };
+    });
+  }
+
+  async cancelStateOverride(
+    userId: string,
+    slug: string,
+    serviceId: string,
+    input: { reason: string },
+  ) {
+    const context = await this.manageContext(userId, slug);
+    return this.databaseService.database.transaction(async (transaction) => {
+      const service = await transaction.execute<{
+        currentState: string;
+        evidenceState: string;
+      }>(sql`
+        SELECT current_state AS "currentState", evidence_state AS "evidenceState" FROM services
+        WHERE id = ${serviceId} AND organization_id = ${context.organizationId} AND deleted_at IS NULL FOR UPDATE
+      `);
+      if (!service.rows[0]) throw new NotFoundException("Service not found");
+      const cancelled = await transaction.execute<{ id: string }>(sql`
+        UPDATE service_state_overrides SET cancelled_at = now(), cancelled_by_user_id = ${userId}, updated_at = now()
+        WHERE organization_id = ${context.organizationId} AND service_id = ${serviceId} AND cancelled_at IS NULL
+        RETURNING id
+      `);
+      if (!cancelled.rows[0]) throw new NotFoundException("Active state override not found");
+      const maintenance = await transaction.execute(sql`
+        SELECT 1 FROM maintenance_windows w JOIN maintenance_window_services s
+          ON s.maintenance_window_id = w.id AND s.organization_id = w.organization_id
+        WHERE w.organization_id = ${context.organizationId} AND s.service_id = ${serviceId}
+          AND w.status = 'scheduled' AND w.starts_at <= now() AND w.ends_at > now() LIMIT 1
+      `);
+      const restoredState = maintenance.rows[0]
+        ? "under_maintenance"
+        : service.rows[0].evidenceState;
+      await transaction.execute(sql`
+        UPDATE services SET current_state = ${restoredState}, state_changed_at = now(), updated_at = now(), version = version + 1
+        WHERE id = ${serviceId} AND organization_id = ${context.organizationId}
+      `);
+      await transaction.execute(sql`
+        INSERT INTO service_state_transitions
+          (organization_id, service_id, from_state, to_state, evidence_state, actor_type, actor_user_id,
+           reason, source, idempotency_key, evidence, occurred_at)
+        VALUES (${context.organizationId}, ${serviceId}, ${service.rows[0].currentState}, ${restoredState},
+          ${service.rows[0].evidenceState}, 'user', ${userId}, ${input.reason}, 'manual_override',
+          ${`override:${cancelled.rows[0].id}:cancelled`}, ${JSON.stringify({ overrideId: cancelled.rows[0].id })}::jsonb, now())
+      `);
+      await this.audit(
+        transaction,
+        userId,
+        context.organizationId,
+        "service.state_override_cancelled",
+        "service",
+        serviceId,
+        {
+          overrideId: cancelled.rows[0].id,
+          reason: input.reason,
+          restoredState,
+        },
+      );
+      return { cancelled: true, currentState: restoredState };
     });
   }
 

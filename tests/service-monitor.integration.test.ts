@@ -215,4 +215,41 @@ describe("service and monitor lifecycle", () => {
       }
     }
   });
+
+  it("creates, exposes, audits, and cancels expiring manual service-state overrides", async () => {
+    await organizations.create(ownerId, { name: "Override Team", slug: "override-team" });
+    const service = (await resources.createService(ownerId, "override-team", {
+      displayOrder: 0,
+      isPublic: true,
+      name: "Override API",
+    })) as { id: string };
+    const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+    await expect(
+      resources.createStateOverride(ownerId, "override-team", service.id, {
+        expiresAt,
+        reason: "Known upstream degradation",
+        state: "degraded_performance",
+      }),
+    ).resolves.toMatchObject({
+      reason: "Known upstream degradation",
+      state: "degraded_performance",
+    });
+    await expect(resources.getService(ownerId, "override-team", service.id)).resolves.toMatchObject(
+      {
+        currentState: "degraded_performance",
+        evidenceState: "unknown",
+        stateOverride: { reason: "Known upstream degradation", state: "degraded_performance" },
+      },
+    );
+    await expect(
+      resources.cancelStateOverride(ownerId, "override-team", service.id, {
+        reason: "Manual declaration no longer required",
+      }),
+    ).resolves.toEqual({ cancelled: true, currentState: "unknown" });
+    const audit = await client.database.execute<{ count: number }>(sql`
+      SELECT count(*)::int AS count FROM audit_events WHERE actor_user_id = ${ownerId}
+        AND action IN ('service.state_override_created', 'service.state_override_cancelled')
+    `);
+    expect(audit.rows[0]?.count).toBe(2);
+  });
 });

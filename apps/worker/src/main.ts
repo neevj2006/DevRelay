@@ -2,8 +2,10 @@ import { parseWorkerEnvironment } from "@devrelay/config";
 import { createDatabaseClient } from "@devrelay/database";
 import {
   MonitorCheckExecutor,
+  MonitoringFreshnessDetector,
   MonitorScheduler,
   OutboxDispatcher,
+  PolicyEngine,
   updateWorkerHeartbeat,
 } from "@devrelay/execution";
 import { BullMqJobQueue } from "@devrelay/queue";
@@ -20,9 +22,11 @@ const startedAt = new Date();
 const database = createDatabaseClient(environment.DATABASE_URL, { max: 10 });
 const queue = new BullMqJobQueue({ connection: { url: environment.REDIS_URL! } });
 const executor = new MonitorCheckExecutor(database, queue, environment.WORKER_ID);
-const runtime = new BullMqWorkerRuntime(environment, executor);
+const policyEngine = new PolicyEngine(database);
+const runtime = new BullMqWorkerRuntime(environment, executor, policyEngine);
 const scheduler = new MonitorScheduler(database, queue, { deploymentMode: "local" });
 const outbox = new OutboxDispatcher(database, queue, environment.WORKER_ID);
+const freshness = new MonitoringFreshnessDetector(database, queue);
 
 async function runMaintenance(): Promise<void> {
   await updateWorkerHeartbeat(database, {
@@ -31,8 +35,12 @@ async function runMaintenance(): Promise<void> {
     startedAt,
     workerId: environment.WORKER_ID,
   });
-  const [scheduled, dispatched] = await Promise.all([scheduler.dispatchDue(), outbox.dispatch()]);
-  console.log(JSON.stringify({ dispatched, event: "worker.heartbeat", scheduled }));
+  const [scheduled, dispatched, health] = await Promise.all([
+    scheduler.dispatchDue(),
+    outbox.dispatch(),
+    freshness.inspect(),
+  ]);
+  console.log(JSON.stringify({ dispatched, event: "worker.heartbeat", health, scheduled }));
 }
 
 await runMaintenance();

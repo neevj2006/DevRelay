@@ -54,7 +54,10 @@ export class MonitorCheckExecutor {
         "SELECT 1 FROM check_results WHERE organization_id = $1 AND monitor_id = $2 AND scheduled_at = $3",
         [job.organizationId, job.payload.monitorId, scheduledAt],
       );
-      if (existing.rowCount) return { duplicate: true };
+      if (existing.rowCount) {
+        await this.enqueuePolicy(job);
+        return { duplicate: true };
+      }
       throw new Error("Check window is currently claimed or unavailable");
     }
 
@@ -95,6 +98,7 @@ export class MonitorCheckExecutor {
     }
     const finishedAt = new Date();
     const client = await this.database.pool.connect();
+    let insertedNew = false;
     try {
       await client.query("BEGIN");
       const inserted = await client.query(
@@ -131,13 +135,18 @@ export class MonitorCheckExecutor {
         [scheduledAt, job.organizationId, job.payload.monitorId],
       );
       await client.query("COMMIT");
-      if (!inserted.rowCount) return { duplicate: true };
+      insertedNew = !!inserted.rowCount;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
+    await this.enqueuePolicy(job);
+    return insertedNew ? { duplicate: false, outcome } : { duplicate: true };
+  }
+
+  private async enqueuePolicy(job: MonitorCheckJob): Promise<void> {
     const policyJob: PolicyEvaluationJob = {
       correlationId: job.correlationId,
       createdAt: new Date().toISOString(),
@@ -148,7 +157,6 @@ export class MonitorCheckExecutor {
       version: 1,
     };
     await this.queue.enqueue(policyJob);
-    return { duplicate: false, outcome };
   }
 }
 
