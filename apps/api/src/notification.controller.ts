@@ -14,7 +14,6 @@ import {
   Headers,
   Param,
   Post,
-  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -30,10 +29,7 @@ export class NotificationController {
 
   @Post("status/:slug/subscriptions")
   subscribe(@Param("slug") slug: string, @Body() body: unknown, @Req() request: Request) {
-    const address =
-      request.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ??
-      request.ip ??
-      "unknown";
+    const address = request.ip ?? request.socket.remoteAddress ?? "unknown";
     return this.notifications.subscribe(
       parseRequestBody(slugSchema, slug),
       parseRequestBody(createSubscriptionInputSchema, body),
@@ -58,10 +54,10 @@ export class NotificationController {
     );
   }
 
-  @Get("subscriptions/preferences")
-  getPreferences(@Query("token") token: string) {
+  @Post("subscriptions/preferences/read")
+  getPreferences(@Body() body: unknown) {
     return this.notifications.getPreferences(
-      parseRequestBody(subscriberTokenInputSchema, { token }).token,
+      parseRequestBody(subscriberTokenInputSchema, body).token,
     );
   }
 

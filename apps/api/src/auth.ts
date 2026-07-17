@@ -17,6 +17,9 @@ export function createDevRelayAuth(database: Database, environment: ApiEnvironme
     environment.GITHUB_CLIENT_ID !== undefined && environment.GITHUB_CLIENT_SECRET !== undefined;
 
   return betterAuth({
+    account: {
+      encryptOAuthTokens: true,
+    },
     advanced: {
       cookiePrefix: "devrelay",
       database: { generateId: "uuid" },

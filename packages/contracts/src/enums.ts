@@ -93,6 +93,7 @@ export const retentionResourceValues = [
   "check_results",
   "delivery_attempts",
   "completed_outbox_events",
+  "subscriber_tokens",
 ] as const;
 export const retentionRunStatusValues = ["running", "succeeded", "failed"] as const;
 

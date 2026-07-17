@@ -12,6 +12,7 @@ import {
   NotificationFanoutProcessor,
   OutboxDispatcher,
   PolicyEngine,
+  RetentionCleaner,
   updateWorkerHeartbeat,
 } from "@devrelay/execution";
 import { BullMqJobQueue } from "@devrelay/queue";
@@ -55,7 +56,13 @@ const deliveries = new NotificationDeliveryDispatcher(database, queue);
 const freshness = new MonitoringFreshnessDetector(database, queue);
 const availability = new AvailabilityAggregationScheduler(database, queue);
 const maintenance = new MaintenanceReconciler(database);
+const retention = new RetentionCleaner(database, {
+  checkResultDays: environment.CHECK_RESULT_RETENTION_DAYS,
+  deliveryAttemptDays: environment.DELIVERY_ATTEMPT_RETENTION_DAYS,
+  tokenDays: environment.TOKEN_RETENTION_DAYS,
+});
 let lastAggregationDay: string | undefined;
+let lastRetentionDay: string | undefined;
 
 async function runMaintenance(): Promise<void> {
   await updateWorkerHeartbeat(database, {
@@ -75,6 +82,9 @@ async function runMaintenance(): Promise<void> {
   const aggregationJobs =
     lastAggregationDay === aggregationDay ? 0 : await availability.dispatch(aggregationDay);
   lastAggregationDay = aggregationDay;
+  const retentionDay = new Date().toISOString().slice(0, 10);
+  const retentionResult = lastRetentionDay === retentionDay ? null : await retention.run();
+  lastRetentionDay = retentionDay;
   console.log(
     JSON.stringify({
       aggregationJobs,
@@ -83,6 +93,7 @@ async function runMaintenance(): Promise<void> {
       event: "worker.heartbeat",
       health,
       maintenanceState,
+      retentionResult,
       scheduled,
     }),
   );

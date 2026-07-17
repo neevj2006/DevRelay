@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createPinnedLookup,
   describeMonitorPolicy,
   EndpointPolicyError,
   isForbiddenAddress,
@@ -53,6 +54,15 @@ describe("endpoint policy", () => {
     ).rejects.toMatchObject({ code: "forbidden_address" });
   });
 
+  it.each(["http://2130706433", "http://0177.0.0.1", "http://0x7f000001"])(
+    "blocks alternate loopback representation %s",
+    async (url) => {
+      await expect(validateEndpointDestination(url)).rejects.toMatchObject({
+        code: "forbidden_address",
+      });
+    },
+  );
+
   it("normalizes allowed headers and blocks credential-bearing headers", () => {
     expect(validateRequestHeaders({ Accept: "application/json" })).toEqual({
       accept: "application/json",
@@ -66,16 +76,19 @@ describe("endpoint policy", () => {
 
 describe("safe monitor test", () => {
   it("revalidates a redirect and records metadata without a body", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(null, { headers: { location: "https://www.example.com/final" }, status: 302 }),
-      )
-      .mockResolvedValueOnce(new Response("secret body", { status: 200 }));
+    const requester = vi
+      .fn()
+      .mockResolvedValueOnce({
+        headers: { location: "https://www.example.com/final" },
+        responseTooLarge: false,
+        status: 302,
+      })
+      .mockResolvedValueOnce({ headers: {}, responseTooLarge: false, status: 200 });
     const result = await runSafeMonitorTest({
       endpointUrl: "https://example.com",
       method: "GET",
       resolver: publicResolver,
+      requester,
       timeoutMilliseconds: 1000,
     });
     expect(result).toMatchObject({
@@ -85,20 +98,49 @@ describe("safe monitor test", () => {
       redirectCount: 1,
     });
     expect(result).not.toHaveProperty("body");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requester).toHaveBeenCalledTimes(2);
   });
 
   it("stops oversized responses", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("123456"));
+    const requester = vi.fn().mockResolvedValue({
+      headers: {},
+      responseTooLarge: true,
+      status: 200,
+    });
     await expect(
       runSafeMonitorTest({
         endpointUrl: "https://example.com",
         maxResponseBytes: 5,
         method: "GET",
         resolver: publicResolver,
+        requester,
         timeoutMilliseconds: 1000,
       }),
     ).resolves.toMatchObject({ code: "response_too_large", ok: false });
+  });
+
+  it("pins the connection lookup to the address set that passed policy", async () => {
+    const callback = vi.fn();
+    const pinnedLookup = createPinnedLookup({ address: "93.184.216.34", family: 4 });
+    pinnedLookup("rebind.example", {}, callback);
+    expect(callback).toHaveBeenCalledWith(null, "93.184.216.34", 4);
+  });
+
+  it("does not resolve a hostname again between validation and connection", async () => {
+    const resolver = vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 as const }]);
+    const requester = vi.fn().mockImplementation(({ destination }) => {
+      expect(destination.addresses).toEqual([{ address: "93.184.216.34", family: 4 }]);
+      return Promise.resolve({ headers: {}, responseTooLarge: false, status: 200 });
+    });
+    await runSafeMonitorTest({
+      endpointUrl: "https://rebind.example",
+      method: "GET",
+      resolver,
+      requester,
+      timeoutMilliseconds: 1000,
+    });
+    expect(resolver).toHaveBeenCalledOnce();
+    expect(requester).toHaveBeenCalledOnce();
   });
 });
 

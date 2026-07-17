@@ -10,19 +10,38 @@ type Preferences = {
   serviceIds: string[];
   services: { id: string; name: string }[];
 };
-export function SubscriberPreferencesForm({ token }: { token: string }) {
+export function SubscriberPreferencesForm() {
+  const [token, setToken] = useState<string | null>(null);
   const [data, setData] = useState<Preferences | null>(null);
   const [message, setMessage] = useState("");
   useEffect(() => {
-    fetch(
-      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/subscriptions/preferences?token=${encodeURIComponent(token)}`,
-    )
-      .then(async (r) => {
-        if (!r.ok) throw new Error();
-        setData(await r.json());
-      })
-      .catch(() => setMessage("This preferences link is invalid or expired."));
-  }, [token]);
+    async function load() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const fragmentToken = params.get("token");
+      window.history.replaceState(null, "", window.location.pathname);
+      if (!fragmentToken) {
+        await Promise.resolve();
+        setMessage("This preferences link is invalid or expired.");
+        return;
+      }
+      setToken(fragmentToken);
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/subscriptions/preferences/read`,
+          {
+            body: JSON.stringify({ token: fragmentToken }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          },
+        );
+        if (!response.ok) throw new Error();
+        setData(await response.json());
+      } catch {
+        setMessage("This preferences link is invalid or expired.");
+      }
+    }
+    void load();
+  }, []);
   if (!data)
     return (
       <p role={message ? "alert" : undefined} className="text-sm text-text-secondary">
@@ -30,6 +49,7 @@ export function SubscriberPreferencesForm({ token }: { token: string }) {
       </p>
     );
   async function submit(formData: FormData) {
+    if (!token) return;
     const serviceIds = formData.getAll("serviceIds").map(String);
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/subscriptions/preferences`,

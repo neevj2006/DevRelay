@@ -94,7 +94,7 @@ describe("subscriber notification lifecycle", () => {
       pending.rows[0]!.safePayload.verifyUrlCiphertext,
       process.env.NOTIFICATION_ENCRYPTION_KEY!,
     );
-    const token = new URL(verifyUrl).searchParams.get("token")!;
+    const token = new URLSearchParams(new URL(verifyUrl).hash.slice(1)).get("token")!;
     const controls = await notifications.verify(token);
     await notifications.updatePreferences({
       incidentNotifications: true,

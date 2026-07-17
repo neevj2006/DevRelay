@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { parseApiEnvironment } from "@devrelay/config";
 import { type QueueJob } from "@devrelay/contracts";
 import {
@@ -12,6 +14,7 @@ import {
   NotificationFanoutProcessor,
   OutboxDispatcher,
   PolicyEngine,
+  RetentionCleaner,
 } from "@devrelay/execution";
 import { QStashJobQueue } from "@devrelay/queue";
 import { Injectable, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
@@ -41,7 +44,7 @@ export class QStashService {
 
   constructor(private readonly database: DatabaseService) {}
 
-  async verify(body: string, signature: string | undefined, path: string): Promise<void> {
+  async verifyAndClaim(body: string, signature: string | undefined, path: string) {
     if (!this.receiver || !signature) throw new UnauthorizedException("QStash signature required");
     try {
       const url = new URL(path, this.environment.QSTASH_DELIVERY_BASE_URL).href;
@@ -49,6 +52,23 @@ export class QStashService {
     } catch {
       throw new UnauthorizedException("Invalid QStash signature");
     }
+    const key = `qstash-replay:${createHash("sha256")
+      .update(path)
+      .update("\0")
+      .update(signature)
+      .update("\0")
+      .update(body)
+      .digest("hex")}`;
+    const claim = await this.database.client.pool.query(
+      `INSERT INTO auth_rate_limits (key,count,last_request) VALUES ($1,1,$2)
+       ON CONFLICT (key) DO NOTHING RETURNING key`,
+      [key, Date.now()],
+    );
+    return { duplicate: !claim.rowCount, key };
+  }
+
+  async releaseClaim(key: string): Promise<void> {
+    await this.database.client.pool.query("DELETE FROM auth_rate_limits WHERE key=$1", [key]);
   }
 
   async dispatchDue(): Promise<{ claimed: number; paused: boolean }> {
@@ -64,6 +84,11 @@ export class QStashService {
     await new NotificationDeliveryDispatcher(this.database.client, queue).dispatchDue();
     await new MaintenanceReconciler(this.database.client).reconcile();
     await new AvailabilityAggregationScheduler(this.database.client, queue).dispatch();
+    await new RetentionCleaner(this.database.client, {
+      checkResultDays: this.environment.CHECK_RESULT_RETENTION_DAYS,
+      deliveryAttemptDays: this.environment.DELIVERY_ATTEMPT_RETENTION_DAYS,
+      tokenDays: this.environment.TOKEN_RETENTION_DAYS,
+    }).run();
     return scheduled;
   }
 

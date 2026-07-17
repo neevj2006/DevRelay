@@ -157,6 +157,7 @@ describe("runtime environment contracts", () => {
       DATABASE_URL: "postgresql://user:password@localhost:5432/devrelay",
       GITHUB_CLIENT_ID: "client",
       GITHUB_CLIENT_SECRET: "secret",
+      NODE_ENV: "development",
     };
 
     expect(apiEnvironmentSchema.safeParse({ ...apiBase, QUEUE_ADAPTER: "bullmq" }).success).toBe(
@@ -181,6 +182,7 @@ describe("runtime environment contracts", () => {
     expect(
       workerEnvironmentSchema.safeParse({
         DATABASE_URL: apiBase.DATABASE_URL,
+        NODE_ENV: "development",
         QUEUE_ADAPTER: "qstash",
         WORKER_ID: "hosted-dispatcher",
       }).success,

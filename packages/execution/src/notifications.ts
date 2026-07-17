@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes }
 import type { NotificationDeliveryJob, OutboxDispatchJob } from "@devrelay/contracts";
 import { incidentWebhookPayloadV1Schema } from "@devrelay/contracts";
 import type { DatabaseClient } from "@devrelay/database";
-import { validateEndpointDestination } from "@devrelay/monitoring";
+import { requestPinnedEndpoint, resolveEndpointDestination } from "@devrelay/monitoring";
 import type { JobQueue } from "@devrelay/queue";
 import { retryDelay } from "@devrelay/queue";
 import nodemailer from "nodemailer";
@@ -413,11 +413,12 @@ export class NotificationDeliveryProcessor {
     );
     const target = destination.rows[0];
     if (!target) throw new ProviderError(false, "webhook_destination_inactive");
-    await validateEndpointDestination(target.endpoint_url);
+    const resolvedDestination = await resolveEndpointDestination(target.endpoint_url);
     const body = JSON.stringify(delivery.safe_payload);
     const timestamp = Date.now().toString();
-    const response = await fetch(target.endpoint_url, {
+    const response = await requestPinnedEndpoint({
       body,
+      destination: resolvedDestination,
       headers: {
         "Content-Type": "application/json",
         "DevRelay-Delivery-Id": delivery.id,
@@ -429,11 +430,13 @@ export class NotificationDeliveryProcessor {
         "DevRelay-Timestamp": timestamp,
         "DevRelay-Version": "1",
       },
+      maxResponseBytes: 65_536,
       method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(10_000),
+      timeoutMilliseconds: 10_000,
     });
-    if (!response.ok)
+    if (response.responseTooLarge)
+      throw new ProviderError(false, "webhook_response_too_large", response.status);
+    if (response.status < 200 || response.status >= 300)
       throw new ProviderError(
         response.status >= 500 || response.status === 408 || response.status === 429,
         `webhook_http_${response.status}`,

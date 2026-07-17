@@ -93,7 +93,7 @@ describe("service and monitor lifecycle", () => {
     ).rejects.toMatchObject({ response: { error: "forbidden_address" }, status: 400 });
 
     const monitor = await resources.createMonitor(ownerId, "reliability-team", {
-      endpointUrl: "https://1.1.1.1/health",
+      endpointUrl: "https://1.1.1.1/",
       method: "GET",
       name: "API health",
       serviceId: service.id,
@@ -112,7 +112,6 @@ describe("service and monitor lifecycle", () => {
       resources.activateMonitor(ownerId, "reliability-team", monitor.id),
     ).rejects.toThrow("Run a successful test");
 
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not retained", { status: 200 }));
     await expect(
       resources.testMonitor(ownerId, "reliability-team", monitor.id),
     ).resolves.toMatchObject({ httpStatusCode: 200, ok: true });

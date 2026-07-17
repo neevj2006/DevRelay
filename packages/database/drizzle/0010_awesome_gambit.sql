@@ -1,0 +1,1 @@
+ALTER TYPE "public"."retention_resource" ADD VALUE 'subscriber_tokens';
