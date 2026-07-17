@@ -52,19 +52,37 @@ export const availabilityAggregateJobSchema = z.strictObject({
   version: z.literal(1),
 });
 
+export const policyEvaluationJobSchema = z.strictObject({
+  ...jobEnvelopeFields,
+  name: z.literal("policy.evaluate"),
+  payload: z.strictObject({
+    monitorId: uuidSchema,
+    scheduledAt: utcDateTimeSchema,
+  }),
+  version: z.literal(1),
+});
+
 export const queueJobSchema = z.discriminatedUnion("name", [
   monitorCheckJobSchema,
   outboxDispatchJobSchema,
   notificationDeliveryJobSchema,
   availabilityAggregateJobSchema,
+  policyEvaluationJobSchema,
 ]);
 
 export const queueJobNameValues = queueJobSchema.options.map(
   (option) => option.shape.name.value,
-) as ["monitor.check", "outbox.dispatch", "notification.deliver", "availability.aggregate"];
+) as [
+  "monitor.check",
+  "outbox.dispatch",
+  "notification.deliver",
+  "availability.aggregate",
+  "policy.evaluate",
+];
 
 export type MonitorCheckJob = z.infer<typeof monitorCheckJobSchema>;
 export type OutboxDispatchJob = z.infer<typeof outboxDispatchJobSchema>;
 export type NotificationDeliveryJob = z.infer<typeof notificationDeliveryJobSchema>;
 export type AvailabilityAggregateJob = z.infer<typeof availabilityAggregateJobSchema>;
+export type PolicyEvaluationJob = z.infer<typeof policyEvaluationJobSchema>;
 export type QueueJob = z.infer<typeof queueJobSchema>;

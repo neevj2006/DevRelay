@@ -14,5 +14,13 @@
     "lint": "eslint src",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@devrelay/contracts": "workspace:*",
+    "@upstash/qstash": "^2.8.4",
+    "bullmq": "^5.58.5"
+  },
+  "devDependencies": {
+    "vitest": "4.1.10"
   }
 }

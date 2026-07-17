@@ -1,28 +1,28 @@
 {
-  "name": "@devrelay/worker",
+  "name": "@devrelay/execution",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "dotenv -e ../../.env -- tsx watch src/main.ts",
     "lint": "eslint src",
-    "start": "dotenv -e ../../.env -- tsx src/main.ts",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@devrelay/config": "workspace:*",
     "@devrelay/contracts": "workspace:*",
     "@devrelay/database": "workspace:*",
-    "@devrelay/execution": "workspace:*",
     "@devrelay/monitoring": "workspace:*",
     "@devrelay/queue": "workspace:*",
-    "bullmq": "^5.58.5"
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
-    "dotenv-cli": "^11.0.0",
-    "tsx": "^4.20.6",
     "vitest": "4.1.10"
   }
 }
