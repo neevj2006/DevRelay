@@ -6,6 +6,8 @@ import { AuthService } from "./auth.service.js";
 import { DatabaseService } from "./database.service.js";
 import { IncidentController } from "./incident.controller.js";
 import { IncidentService } from "./incident.service.js";
+import { NotificationController } from "./notification.controller.js";
+import { NotificationService } from "./notification.service.js";
 import { OrganizationController } from "./organization.controller.js";
 import { OrganizationService } from "./organization.service.js";
 import { QStashController } from "./qstash.controller.js";
@@ -20,6 +22,7 @@ import { StatusPageService } from "./status-page.service.js";
   controllers: [
     AppController,
     IncidentController,
+    NotificationController,
     OrganizationController,
     QStashController,
     ServiceMonitorController,
@@ -28,6 +31,7 @@ import { StatusPageService } from "./status-page.service.js";
   providers: [
     AuthService,
     IncidentService,
+    NotificationService,
     OrganizationService,
     QStashService,
     SessionGuard,

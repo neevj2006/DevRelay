@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { type OperationalStatus, StatusBadge } from "@/components/operational-status";
 import { StatusLiveRefresh } from "@/components/status-live-refresh";
 import { StatusPageHeader } from "@/components/status-page-header";
+import { StatusSubscriptionForm } from "@/components/status-subscription-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type StatusData = {
@@ -259,6 +260,19 @@ export default async function PublicStatusPage({
             </ul>
           </section>
         ) : null}
+        <section
+          aria-labelledby="subscribe-title"
+          className="rounded-xl border bg-card p-5 sm:p-6"
+          id="subscribe"
+        >
+          <h2 className="text-xl font-semibold" id="subscribe-title">
+            Get status updates
+          </h2>
+          <p className="mb-4 mt-1 text-sm text-text-secondary">
+            Receive accessible email updates when incidents or maintenance affect these services.
+          </p>
+          <StatusSubscriptionForm slug={statusPageSlug} />
+        </section>
       </main>
       <footer className="border-t bg-card">
         <div className="mx-auto flex max-w-[960px] flex-col gap-2 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:justify-between sm:px-6">

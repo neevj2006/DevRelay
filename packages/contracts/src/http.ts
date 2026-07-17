@@ -180,6 +180,11 @@ export const createSubscriptionInputSchema = z.strictObject({
   incidentNotifications: z.boolean().default(true),
   maintenanceNotifications: z.boolean().default(true),
   serviceIds: z.array(uuidSchema).max(100).default([]),
+  website: z.string().max(0).optional(),
+});
+
+export const subscriberTokenInputSchema = z.strictObject({
+  token: z.string().min(32).max(512),
 });
 
 export const updateSubscriberPreferencesInputSchema = z.strictObject({
@@ -187,6 +192,9 @@ export const updateSubscriberPreferencesInputSchema = z.strictObject({
   maintenanceNotifications: z.boolean(),
   serviceIds: z.array(uuidSchema).max(100),
 });
+
+export const updateSubscriberPreferencesWithTokenInputSchema =
+  updateSubscriberPreferencesInputSchema.extend({ token: z.string().min(32).max(512) });
 
 export const createWebhookDestinationInputSchema = z.strictObject({
   endpointUrl: httpEndpointSchema,
@@ -314,6 +322,11 @@ export type TransitionIncidentInput = z.infer<typeof transitionIncidentInputSche
 export type CreatePublicIncidentUpdateInput = z.infer<typeof createPublicIncidentUpdateInputSchema>;
 export type CreatePrivateIncidentNoteInput = z.infer<typeof createPrivateIncidentNoteInputSchema>;
 export type CreateSubscriptionInput = z.infer<typeof createSubscriptionInputSchema>;
+export type SubscriberTokenInput = z.infer<typeof subscriberTokenInputSchema>;
+export type UpdateSubscriberPreferencesWithTokenInput = z.infer<
+  typeof updateSubscriberPreferencesWithTokenInputSchema
+>;
+export type CreateWebhookDestinationInput = z.infer<typeof createWebhookDestinationInputSchema>;
 export type ServiceResponse = z.infer<typeof serviceResponseSchema>;
 export type MonitorResponse = z.infer<typeof monitorResponseSchema>;
 export type IncidentResponse = z.infer<typeof incidentResponseSchema>;

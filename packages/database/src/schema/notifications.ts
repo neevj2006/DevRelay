@@ -140,6 +140,7 @@ export const subscribers = pgTable(
     normalizedEmail: text("normalized_email").notNull(),
     state: subscriberState("state").default("pending_verification").notNull(),
     consentedAt: timestamp("consented_at", instant).notNull(),
+    consentSource: text("consent_source").default("public_status_page").notNull(),
     verifiedAt: timestamp("verified_at", instant),
     unsubscribedAt: timestamp("unsubscribed_at", instant),
     suppressedAt: timestamp("suppressed_at", instant),
@@ -311,6 +312,8 @@ export const notificationDeliveries = pgTable(
     safePayload: jsonb("safe_payload").$type<Record<string, unknown>>().notNull(),
     status: notificationDeliveryStatus("status").default("pending").notNull(),
     nextAttemptAt: timestamp("next_attempt_at", instant),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", instant),
     completedAt: timestamp("completed_at", instant),
     ...auditTimestamps(),
   },
@@ -370,6 +373,10 @@ export const notificationDeliveries = pgTable(
       sql`length(${table.idempotencyKey}) BETWEEN 1 AND 240`,
     ),
     check("notification_deliveries_payload_version_positive", sql`${table.payloadVersion} > 0`),
+    check(
+      "notification_deliveries_lease_consistent",
+      sql`${table.status} <> 'sending' OR (${table.leaseOwner} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL)`,
+    ),
     check(
       "notification_deliveries_payload_limit",
       sql`octet_length(${table.safePayload}::text) <= 65536`,

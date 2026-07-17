@@ -21,9 +21,11 @@
     "@devrelay/monitoring": "workspace:*",
     "@devrelay/queue": "workspace:*",
     "drizzle-orm": "0.45.2",
+    "nodemailer": "^7.0.13",
     "pg": "8.22.0"
   },
   "devDependencies": {
+    "@types/nodemailer": "^7.0.12",
     "@types/pg": "8.20.0",
     "vitest": "4.1.10"
   }

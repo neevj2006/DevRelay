@@ -21,6 +21,7 @@ async function bootstrap(): Promise<void> {
   });
   app.getHttpAdapter().all("/api/auth/{*any}", toNodeHandler(authService.auth) as never);
   app.use("/internal/qstash", raw({ limit: "256kb", type: "application/json" }));
+  app.use("/provider-webhooks/resend", raw({ limit: "256kb", type: "application/json" }));
   app.useBodyParser("json", { limit: "1mb" });
   app.useBodyParser("urlencoded", { extended: true, limit: "1mb" });
 

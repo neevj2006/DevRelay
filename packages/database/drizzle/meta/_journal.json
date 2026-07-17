@@ -64,6 +64,13 @@
       "when": 1784276371557,
       "tag": "0008_policy-service-health",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784280214230,
+      "tag": "0009_mute_rattler",
+      "breakpoints": true
     }
   ]
 }
