@@ -374,19 +374,19 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
             <CardContent className="space-y-5">
               <dl className="grid gap-4 rounded-lg border bg-surface-subtle p-5 sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Monitor</dt>
+                  <dt className="text-xs text-text-secondary">Monitor</dt>
                   <dd className="mt-1 font-medium">{name}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Endpoint</dt>
+                  <dt className="text-xs text-text-secondary">Endpoint</dt>
                   <dd className="mt-1 break-all font-mono text-xs">{endpoint}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Schedule</dt>
+                  <dt className="text-xs text-text-secondary">Schedule</dt>
                   <dd className="mt-1">Every {interval} seconds</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Policy</dt>
+                  <dt className="text-xs text-text-secondary">Policy</dt>
                   <dd className="mt-1">
                     {failureThreshold} failures / {recoveryThreshold} successes
                   </dd>

@@ -9,7 +9,7 @@
   "scripts": {
     "build": "turbo run build",
     "boundaries": "turbo boundaries",
-    "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm typecheck && pnpm test && pnpm test:integration && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm typecheck && pnpm test && pnpm test:integration && pnpm test:e2e && pnpm build",
     "db:check": "pnpm --filter @devrelay/database db:check",
     "db:generate": "pnpm --filter @devrelay/database db:generate",
     "db:migrate": "pnpm --filter @devrelay/database db:migrate",
@@ -24,11 +24,14 @@
     "infra:up": "docker compose up --detach --wait",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.38.0",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^22.19.0",
     "@types/pg": "^8.15.5",
     "drizzle-orm": "0.45.2",

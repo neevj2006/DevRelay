@@ -207,6 +207,34 @@ describe("outbox dispatch", () => {
 });
 
 describe("queue adapters", () => {
+  it("finds a delayed BullMQ job after the queue client is restarted", async () => {
+    const prefix = `restart-${randomUUID()}`;
+    const connection = { url: process.env.TEST_REDIS_URL ?? "redis://localhost:6379" };
+    const job: QueueJob = {
+      correlationId: "restart",
+      createdAt: new Date().toISOString(),
+      id: `restart-${randomUUID()}`,
+      name: "monitor.check",
+      organizationId: randomUUID(),
+      payload: {
+        monitorId: randomUUID(),
+        scheduledAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+      version: 1,
+    };
+    const firstClient = new BullMqJobQueue({ connection, prefix });
+    const scheduled = await firstClient.schedule(job, new Date(Date.now() + 60_000));
+    await firstClient.close();
+
+    const restartedClient = new BullMqJobQueue({ connection, prefix });
+    expect((await restartedClient.schedule(job, new Date(Date.now() + 60_000))).accepted).toBe(
+      false,
+    );
+    expect((await restartedClient.inspectHealth()).delayed).toBe(1);
+    expect(await restartedClient.cancel(scheduled.jobId)).toBe(true);
+    await restartedClient.close();
+  });
+
   const contract = (name: string, factory: () => JobQueue) => {
     it(`${name} satisfies idempotency, scheduling, health, cancellation, and shutdown`, async () => {
       const queue = factory();

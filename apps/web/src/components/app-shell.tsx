@@ -370,14 +370,17 @@ export function AppShell({
           <ThemeSelector />
           <AccountMenu user={user} />
         </header>
-        <div className="border-b border-[var(--status-degraded-border)] bg-[var(--status-degraded-bg)] px-4 py-2 text-[13px] text-[var(--status-degraded-fg)] sm:px-6">
+        <aside
+          aria-label="Free-tier usage"
+          className="border-b border-[var(--status-degraded-border)] bg-[var(--status-degraded-bg)] px-4 py-2 text-[13px] text-[var(--status-degraded-fg)] sm:px-6"
+        >
           <div className="mx-auto flex max-w-[1440px] items-center gap-2">
             <TriangleAlert aria-hidden="true" className="size-4" />
             <span>
               <strong>Free demo:</strong> 3 of 5 monitors in use.
             </span>
           </div>
-        </div>
+        </aside>
         <main className="mx-auto w-full max-w-[1440px] p-4 sm:p-6" id="main-content" tabIndex={-1}>
           {children}
         </main>

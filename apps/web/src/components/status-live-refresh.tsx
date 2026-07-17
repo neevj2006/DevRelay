@@ -35,10 +35,7 @@ export function StatusLiveRefresh({ slug }: { slug: string }) {
     };
   }, [router, slug]);
   return (
-    <span
-      aria-live="polite"
-      className="inline-flex items-center gap-2 text-xs text-muted-foreground"
-    >
+    <span aria-live="polite" className="inline-flex items-center gap-2 text-xs text-text-secondary">
       <RefreshCw
         aria-hidden="true"
         className={state === "updated" ? "size-3.5" : "size-3.5 motion-safe:animate-spin"}

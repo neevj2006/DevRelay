@@ -109,7 +109,7 @@ export default async function PublicStatusPage({
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-text-secondary">
                 Current status
               </p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight" id="overall-status-title">
@@ -122,7 +122,7 @@ export default async function PublicStatusPage({
             <StatusBadge className="self-start" status={overall} />
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-4 border-t pt-4">
-            <p className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 font-mono text-xs text-text-secondary">
               <Clock3 aria-hidden="true" className="size-3.5" />
               Last updated{" "}
               <time dateTime={data.lastUpdated}>
