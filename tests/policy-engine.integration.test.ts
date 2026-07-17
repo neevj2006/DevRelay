@@ -153,6 +153,11 @@ describe("policy thresholds and service health", () => {
       currentState: "major_outage",
       evidenceState: "major_outage",
     });
+    const createdIncident = await client.database.execute<{ id: string; lifecycle: string }>(
+      sql`SELECT id, lifecycle FROM incidents WHERE organization_id = ${ids.organizationId}`,
+    );
+    expect(createdIncident.rows).toHaveLength(1);
+    expect(createdIncident.rows[0]!.lifecycle).toBe("investigating");
 
     const recoveryOne = new Date(outageAt.getTime() + 300_000);
     await engine.evaluate(
@@ -160,6 +165,10 @@ describe("policy thresholds and service health", () => {
       new Date(recoveryOne.getTime() + 1_000),
     );
     expect((await serviceState(ids.serviceId)).currentState).toBe("major_outage");
+    const monitoringIncident = await client.database.execute<{ lifecycle: string }>(
+      sql`SELECT lifecycle FROM incidents WHERE id = ${createdIncident.rows[0]!.id}`,
+    );
+    expect(monitoringIncident.rows[0]!.lifecycle).toBe("monitoring");
     const recoveryTwo = new Date(recoveryOne.getTime() + 300_000);
     await engine.evaluate(
       await addResult(ids, recoveryTwo, "success"),
@@ -168,6 +177,20 @@ describe("policy thresholds and service health", () => {
     expect(await serviceState(ids.serviceId)).toEqual({
       currentState: "operational",
       evidenceState: "operational",
+    });
+    const resolvedIncident = await client.database.execute<{
+      lifecycle: string;
+      outcome: string;
+      transitionCount: number;
+    }>(sql`
+      SELECT i.lifecycle, i.outcome, count(t.id)::int AS "transitionCount"
+      FROM incidents i JOIN incident_transitions t ON t.incident_id = i.id
+      WHERE i.id = ${createdIncident.rows[0]!.id} GROUP BY i.id
+    `);
+    expect(resolvedIncident.rows[0]).toEqual({
+      lifecycle: "resolved",
+      outcome: "resolved",
+      transitionCount: 4,
     });
   });
 
@@ -198,6 +221,22 @@ describe("policy thresholds and service health", () => {
     expect(counts.rows[0]).toEqual({ evaluations: "1", transitions: "2" });
   });
 
+  it("creates one automatic incident when duplicate workers evaluate simultaneously", async () => {
+    const ids = await seedPolicy({ failureThreshold: 1, recoveryThreshold: 1 });
+    const engine = new PolicyEngine(client);
+    const at = new Date("2026-07-17T11:30:00Z");
+    const job = await addResult(ids, at, "failure");
+    await Promise.all([
+      engine.evaluate(job, new Date(at.getTime() + 1_000)),
+      engine.evaluate(job, new Date(at.getTime() + 1_001)),
+    ]);
+    const count = await client.database.execute<{ incidents: number; transitions: number }>(sql`
+      SELECT (SELECT count(*)::int FROM incidents WHERE organization_id = ${ids.organizationId}) AS incidents,
+        (SELECT count(*)::int FROM incident_transitions WHERE organization_id = ${ids.organizationId}) AS transitions
+    `);
+    expect(count.rows[0]).toEqual({ incidents: 1, transitions: 2 });
+  });
+
   it("keeps underlying evidence during maintenance and exposes maintenance presentation", async () => {
     const ids = await seedPolicy({ failureThreshold: 1, recoveryThreshold: 1 });
     const windowId = randomUUID();
@@ -217,6 +256,10 @@ describe("policy thresholds and service health", () => {
       currentState: "under_maintenance",
       evidenceState: "major_outage",
     });
+    const incidents = await client.database.execute<{ count: number }>(
+      sql`SELECT count(*)::int AS count FROM incidents WHERE organization_id = ${ids.organizationId}`,
+    );
+    expect(incidents.rows[0]!.count).toBe(0);
   });
 
   it("maps confirmed monitor impact to degraded and partial outage service states", async () => {
