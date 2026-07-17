@@ -13,6 +13,8 @@ import { QStashService } from "./qstash.service.js";
 import { ServiceMonitorController } from "./service-monitor.controller.js";
 import { ServiceMonitorService } from "./service-monitor.service.js";
 import { SessionGuard } from "./session.guard.js";
+import { StatusPageController } from "./status-page.controller.js";
+import { StatusPageService } from "./status-page.service.js";
 
 @Module({
   controllers: [
@@ -21,6 +23,7 @@ import { SessionGuard } from "./session.guard.js";
     OrganizationController,
     QStashController,
     ServiceMonitorController,
+    StatusPageController,
   ],
   providers: [
     AuthService,
@@ -29,6 +32,7 @@ import { SessionGuard } from "./session.guard.js";
     QStashService,
     SessionGuard,
     ServiceMonitorService,
+    StatusPageService,
     {
       provide: DatabaseService,
       useFactory: () => {

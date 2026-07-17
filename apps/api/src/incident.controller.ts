@@ -7,7 +7,7 @@ import {
   updateIncidentInputSchema,
   uuidSchema,
 } from "@devrelay/contracts";
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 
 import { IncidentService } from "./incident.service.js";
 import { parseRequestBody } from "./request-validation.js";
@@ -19,6 +19,7 @@ export class IncidentController {
   constructor(private readonly incidents: IncidentService) {}
 
   @Get()
+  @Header("Cache-Control", "private, no-store")
   list(@Req() request: AuthenticatedRequest, @Param("organizationSlug") slug: string) {
     return this.incidents.list(request.auth.user.id, parseRequestBody(slugSchema, slug));
   }
@@ -37,6 +38,7 @@ export class IncidentController {
   }
 
   @Get(":incidentId")
+  @Header("Cache-Control", "private, no-store")
   get(
     @Req() request: AuthenticatedRequest,
     @Param("organizationSlug") slug: string,

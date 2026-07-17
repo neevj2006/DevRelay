@@ -73,6 +73,10 @@ export class OrganizationService {
           INSERT INTO organizations (id, name, slug, owner_user_id)
           VALUES (${organizationId}, ${input.name}, ${input.slug}, ${userId})
         `);
+        await transaction.execute(sql`
+          INSERT INTO status_pages (organization_id, slug, title, description)
+          VALUES (${organizationId}, ${input.slug}, ${input.name + " status"}, ${`Current availability and incident updates for ${input.name}.`})
+        `);
         const membership = await transaction.execute<{ id: string }>(sql`
           INSERT INTO organization_memberships (organization_id, user_id, role)
           VALUES (${organizationId}, ${userId}, 'owner')
@@ -115,6 +119,12 @@ export class OrganizationService {
             updated_at = now()
           WHERE id = ${context.organizationId} AND deleted_at IS NULL
           RETURNING id, name, slug
+        `);
+        await transaction.execute(sql`
+          UPDATE status_pages SET slug = COALESCE(${input.slug ?? null}, slug),
+            title = CASE WHEN ${input.name === undefined} THEN title ELSE ${input.name ? input.name + " status" : null} END,
+            updated_at = now()
+          WHERE organization_id = ${context.organizationId} AND deleted_at IS NULL
         `);
         await this.audit(transaction, {
           action: "organization.updated",

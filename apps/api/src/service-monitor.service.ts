@@ -142,6 +142,14 @@ export class ServiceMonitorService {
           VALUES (${id}, ${context.organizationId}, ${input.name}, ${input.publicDescription ?? null}, ${input.displayOrder}, ${input.isPublic})
           RETURNING id, organization_id AS "organizationId", name, public_description AS "publicDescription", display_order AS "displayOrder", is_public AS "isPublic", current_state AS "currentState", updated_at AS "updatedAt"
         `);
+        if (input.isPublic) {
+          await transaction.execute(sql`
+            INSERT INTO status_page_services (organization_id, status_page_id, service_id, display_order)
+            SELECT ${context.organizationId}, page.id, ${id},
+              COALESCE((SELECT max(display_order) + 1 FROM status_page_services WHERE organization_id = ${context.organizationId} AND status_page_id = page.id), 0)
+            FROM status_pages page WHERE page.organization_id = ${context.organizationId} AND page.deleted_at IS NULL
+          `);
+        }
         await this.audit(
           transaction,
           userId,
@@ -175,6 +183,19 @@ export class ServiceMonitorService {
           RETURNING id, organization_id AS "organizationId", name, public_description AS "publicDescription", display_order AS "displayOrder", is_public AS "isPublic", current_state AS "currentState", updated_at AS "updatedAt"
         `);
         if (!updated.rows[0]) throw new NotFoundException("Service not found");
+        if (input.isPublic === false) {
+          await transaction.execute(
+            sql`DELETE FROM status_page_services WHERE organization_id = ${context.organizationId} AND service_id = ${serviceId}`,
+          );
+        } else if (input.isPublic === true) {
+          await transaction.execute(sql`
+            INSERT INTO status_page_services (organization_id, status_page_id, service_id, display_order)
+            SELECT ${context.organizationId}, page.id, ${serviceId},
+              COALESCE((SELECT max(display_order) + 1 FROM status_page_services WHERE organization_id = ${context.organizationId} AND status_page_id = page.id), 0)
+            FROM status_pages page WHERE page.organization_id = ${context.organizationId} AND page.deleted_at IS NULL
+            ON CONFLICT (organization_id, status_page_id, service_id) DO NOTHING
+          `);
+        }
         await this.audit(
           transaction,
           userId,
