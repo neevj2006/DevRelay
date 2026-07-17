@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ThemeSelector } from "@/components/theme-selector";
 import { Button } from "@/components/ui/button";
 
-export function StatusPageHeader({ slug }: { slug: string }) {
+export function StatusPageHeader({ slug, title }: { slug: string; title?: string }) {
   return (
     <header className="border-b bg-card">
       <div className="mx-auto flex h-16 max-w-[960px] items-center gap-3 px-4 sm:px-6">
@@ -15,7 +15,7 @@ export function StatusPageHeader({ slug }: { slug: string }) {
           <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <RadioTower aria-hidden="true" className="size-4" />
           </span>
-          Acme Cloud status
+          {title ?? `${slug.replaceAll("-", " ")} status`}
         </Link>
         <ThemeSelector />
         <Button size="sm" variant="outline">
