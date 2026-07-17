@@ -62,12 +62,16 @@ export const createServiceInputSchema = z.strictObject({
   publicDescription: z.string().trim().min(1).max(1000).optional(),
 });
 
-export const updateServiceInputSchema = z.strictObject({
-  displayOrder: z.number().int().nonnegative().optional(),
-  isPublic: z.boolean().optional(),
-  name: displayNameSchema.optional(),
-  publicDescription: z.string().trim().min(1).max(1000).nullable().optional(),
-});
+export const updateServiceInputSchema = z
+  .strictObject({
+    displayOrder: z.number().int().nonnegative().optional(),
+    isPublic: z.boolean().optional(),
+    name: displayNameSchema.optional(),
+    publicDescription: z.string().trim().min(1).max(1000).nullable().optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, {
+    message: "At least one service field must be provided",
+  });
 
 export const acceptedStatusCodeRangeSchema = z
   .strictObject({
@@ -99,12 +103,22 @@ export const createMonitorInputSchema = z
     path: ["policy"],
   });
 
-export const updateMonitorInputSchema = z.strictObject({
-  endpointUrl: httpEndpointSchema.optional(),
-  method: z.enum(monitorMethodValues).optional(),
-  name: displayNameSchema.optional(),
-  policy: monitorPolicyInputSchema.optional(),
-});
+export const updateMonitorInputSchema = z
+  .strictObject({
+    endpointUrl: httpEndpointSchema.optional(),
+    method: z.enum(monitorMethodValues).optional(),
+    name: displayNameSchema.optional(),
+    policy: monitorPolicyInputSchema.optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0, {
+    message: "At least one monitor field must be provided",
+  })
+  .refine(
+    (input) =>
+      input.policy === undefined ||
+      input.policy.timeoutMilliseconds < input.policy.intervalSeconds * 1000,
+    { message: "timeout must be shorter than the monitor interval", path: ["policy"] },
+  );
 
 export const createManualIncidentInputSchema = z.strictObject({
   affectedServiceIds: z.array(uuidSchema).min(1).max(50),
@@ -270,6 +284,8 @@ export const publicStatusPageResponseSchema = z.strictObject({
 export type CreateOrganizationInput = z.infer<typeof createOrganizationInputSchema>;
 export type CreateServiceInput = z.infer<typeof createServiceInputSchema>;
 export type CreateMonitorInput = z.infer<typeof createMonitorInputSchema>;
+export type UpdateServiceInput = z.infer<typeof updateServiceInputSchema>;
+export type UpdateMonitorInput = z.infer<typeof updateMonitorInputSchema>;
 export type CreateManualIncidentInput = z.infer<typeof createManualIncidentInputSchema>;
 export type CreateSubscriptionInput = z.infer<typeof createSubscriptionInputSchema>;
 export type ServiceResponse = z.infer<typeof serviceResponseSchema>;

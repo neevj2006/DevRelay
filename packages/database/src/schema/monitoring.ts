@@ -102,6 +102,10 @@ export const monitors = pgTable(
     endpointUrl: text("endpoint_url").notNull(),
     method: monitorMethod("method").default("GET").notNull(),
     status: monitorStatus("status").default("pending").notNull(),
+    configurationVersion: integer("configuration_version").default(1).notNull(),
+    testedConfigurationVersion: integer("tested_configuration_version"),
+    lastTestedAt: timestamp("last_tested_at", instant),
+    lastTestEvidence: jsonb("last_test_evidence").$type<Record<string, unknown>>(),
     nextDueAt: timestamp("next_due_at", instant),
     lastCompletedScheduledAt: timestamp("last_completed_scheduled_at", instant),
     pausedAt: timestamp("paused_at", instant),
@@ -128,6 +132,11 @@ export const monitors = pgTable(
     ),
     check("monitors_name_nonempty", sql`length(trim(${table.name})) BETWEEN 1 AND 120`),
     check("monitors_endpoint_length", sql`length(${table.endpointUrl}) BETWEEN 1 AND 2048`),
+    check("monitors_configuration_version_positive", sql`${table.configurationVersion} > 0`),
+    check(
+      "monitors_tested_version_valid",
+      sql`${table.testedConfigurationVersion} IS NULL OR (${table.testedConfigurationVersion} > 0 AND ${table.testedConfigurationVersion} <= ${table.configurationVersion})`,
+    ),
   ],
 );
 

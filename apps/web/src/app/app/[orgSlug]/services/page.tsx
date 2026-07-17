@@ -2,12 +2,23 @@ import { Archive, MoreHorizontal, Plus, Search } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState, ErrorState, LoadingState } from "@/components/data-state";
-import { StatusBadge } from "@/components/operational-status";
+import { type OperationalStatus, StatusBadge } from "@/components/operational-status";
 import { PageHeader } from "@/components/page-header";
 import { ResponsiveDataTable } from "@/components/responsive-data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { prototypeServices } from "@/lib/prototype-data";
+import { apiRequest } from "@/lib/auth-server";
+
+type ServiceRow = {
+  activeIncidentCount: number;
+  availability: number;
+  currentState: OperationalStatus;
+  id: string;
+  lastCheckAt: string | null;
+  monitorCount: number;
+  name: string;
+  publicDescription: string | null;
+};
 
 export default async function ServicesPage({
   params,
@@ -17,6 +28,17 @@ export default async function ServicesPage({
   searchParams: Promise<{ state?: string }>;
 }) {
   const [{ orgSlug }, { state }] = await Promise.all([params, searchParams]);
+  let services: ServiceRow[] = [];
+  let loadFailed = false;
+  if (!state) {
+    try {
+      const response = await apiRequest(`/organizations/${orgSlug}/services`);
+      loadFailed = !response.ok;
+      if (response.ok) services = (await response.json()) as ServiceRow[];
+    } catch {
+      loadFailed = true;
+    }
+  }
   return (
     <div className="space-y-8">
       <PageHeader
@@ -32,13 +54,13 @@ export default async function ServicesPage({
         title="Services"
       />
       {state === "loading" ? <LoadingState label="Loading services" /> : null}
-      {state === "error" ? (
+      {state === "error" || loadFailed ? (
         <ErrorState
           description="Service data could not be loaded. Your filters are preserved."
           title="Services unavailable"
         />
       ) : null}
-      {state === "empty" ? (
+      {state === "empty" || (!state && !loadFailed && services.length === 0) ? (
         <EmptyState
           action={
             <Button asChild>
@@ -52,7 +74,7 @@ export default async function ServicesPage({
           title="No services yet"
         />
       ) : null}
-      {!state ? (
+      {!state && !loadFailed && services.length > 0 ? (
         <>
           <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center">
             <div className="relative flex-1">
@@ -83,7 +105,7 @@ export default async function ServicesPage({
                       {service.name}
                     </Link>
                     <p className="mt-1 font-mono text-xs text-muted-foreground">
-                      {service.endpoint}
+                      {service.publicDescription ?? "No public description"}
                     </p>
                   </div>
                 ),
@@ -91,14 +113,14 @@ export default async function ServicesPage({
               {
                 id: "status",
                 header: "Current state",
-                cell: (service) => <StatusBadge status={service.status} />,
+                cell: (service) => <StatusBadge status={service.currentState} />,
               },
               {
                 id: "monitors",
                 header: "Monitors",
                 className: "text-right",
                 cell: (service) => (
-                  <span className="font-mono tabular-nums">{service.monitors}</span>
+                  <span className="font-mono tabular-nums">{service.monitorCount}</span>
                 ),
               },
               {
@@ -109,7 +131,14 @@ export default async function ServicesPage({
                   <span className="font-mono tabular-nums">{service.availability.toFixed(2)}%</span>
                 ),
               },
-              { id: "freshness", header: "Last check", cell: (service) => service.lastCheck },
+              {
+                id: "freshness",
+                header: "Last check",
+                cell: (service) =>
+                  service.lastCheckAt
+                    ? new Date(service.lastCheckAt).toLocaleString()
+                    : "No evidence",
+              },
               {
                 id: "actions",
                 header: "",
@@ -122,7 +151,7 @@ export default async function ServicesPage({
               },
             ]}
             getRowKey={(service) => service.id}
-            rows={prototypeServices}
+            rows={services}
           />
         </>
       ) : null}

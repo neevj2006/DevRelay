@@ -53,6 +53,18 @@ export function OnboardingFlow() {
         toast.error(body?.message ?? "The organization could not be created.");
         return;
       }
+      const serviceResponse = await fetch(`/api/backend/organizations/${slug}/services`, {
+        body: JSON.stringify({ displayOrder: 0, isPublic, name: serviceName }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      if (!serviceResponse.ok) {
+        const body = (await serviceResponse.json().catch(() => null)) as {
+          message?: string;
+        } | null;
+        toast.error(body?.message ?? "The first service could not be created.");
+        return;
+      }
       router.push(`/app/${slug}`);
       router.refresh();
     } finally {
