@@ -13,6 +13,8 @@ import {
 } from "@devrelay/monitoring";
 import { type JobQueue, PermanentJobError, validateQueueJob } from "@devrelay/queue";
 
+import { runtimeMetrics, structuredLog, withTrace } from "./observability.js";
+
 type MonitorExecutionConfig = {
   accepted_status_codes: readonly { from: number; to: number }[];
   endpoint_url: string;
@@ -35,7 +37,22 @@ export class MonitorCheckExecutor {
   async execute(value: unknown): Promise<{ duplicate: boolean; outcome?: CheckOutcome }> {
     const parsed = validateQueueJob(value);
     if (parsed.name !== "monitor.check") throw new PermanentJobError("Expected monitor.check job");
-    const job: MonitorCheckJob = parsed;
+    return withTrace(
+      "monitor.check",
+      {
+        correlationId: parsed.correlationId,
+        jobId: parsed.id,
+        jobName: parsed.name,
+        monitorId: parsed.payload.monitorId,
+        organizationId: parsed.organizationId,
+      },
+      () => this.executeCheck(parsed),
+    );
+  }
+
+  private async executeCheck(
+    job: MonitorCheckJob,
+  ): Promise<{ duplicate: boolean; outcome?: CheckOutcome }> {
     const scheduledAt = new Date(job.payload.scheduledAt);
     const leaseExpiresAt = new Date(Date.now() + 180_000);
     const claim = await this.database.pool.query<MonitorExecutionConfig>(
@@ -56,6 +73,13 @@ export class MonitorCheckExecutor {
       );
       if (existing.rowCount) {
         await this.enqueuePolicy(job);
+        runtimeMetrics.record("check.duplicate");
+        structuredLog("info", "monitor.check.duplicate", {
+          correlationId: job.correlationId,
+          jobId: job.id,
+          monitorId: job.payload.monitorId,
+          organizationId: job.organizationId,
+        });
         return { duplicate: true };
       }
       throw new Error("Check window is currently claimed or unavailable");
@@ -143,6 +167,20 @@ export class MonitorCheckExecutor {
       client.release();
     }
     await this.enqueuePolicy(job);
+    const latency =
+      evidence?.durationMilliseconds ?? Math.max(0, finishedAt.getTime() - startedAt.getTime());
+    runtimeMetrics.record("check.completed", 1, { outcome });
+    runtimeMetrics.record("check.latency", latency, { outcome });
+    if (!insertedNew) runtimeMetrics.record("check.duplicate");
+    structuredLog("info", "monitor.check.completed", {
+      correlationId: job.correlationId,
+      durationMilliseconds: latency,
+      jobId: job.id,
+      monitorId: job.payload.monitorId,
+      organizationId: job.organizationId,
+      outcome,
+      status: insertedNew ? "recorded" : "duplicate",
+    });
     return insertedNew ? { duplicate: false, outcome } : { duplicate: true };
   }
 

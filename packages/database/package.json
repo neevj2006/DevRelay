@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@devrelay/contracts": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
     "drizzle-orm": "0.45.2",
     "pg": "8.22.0"
   },

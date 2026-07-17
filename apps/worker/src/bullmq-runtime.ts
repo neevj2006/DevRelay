@@ -6,6 +6,7 @@ import {
   NotificationDeliveryProcessor,
   NotificationFanoutProcessor,
   PolicyEngine,
+  structuredLog,
 } from "@devrelay/execution";
 import { bullMqQueueName, classifyJobError, validateQueueJob } from "@devrelay/queue";
 import { type ConnectionOptions, type Processor, UnrecoverableError, Worker } from "bullmq";
@@ -62,7 +63,10 @@ export class BullMqWorkerRuntime {
     ];
     for (const worker of this.workers) {
       worker.on("error", (error) =>
-        console.error(JSON.stringify({ error: error.message, event: "worker.error" })),
+        structuredLog("error", "queue.worker.error", {
+          reason: error.name,
+          status: "failed",
+        }),
       );
     }
   }

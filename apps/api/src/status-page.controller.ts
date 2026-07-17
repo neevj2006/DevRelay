@@ -1,5 +1,6 @@
 import { parseApiEnvironment } from "@devrelay/config";
 import { slugSchema } from "@devrelay/contracts";
+import { runtimeMetrics } from "@devrelay/execution";
 import {
   Controller,
   Get,
@@ -28,6 +29,7 @@ export class StatusPageController {
   @Header("Cache-Control", "public, max-age=15, stale-while-revalidate=45")
   get(@Param("slug") slug: string, @Req() request: Request) {
     this.assertPublicReadBudget(request);
+    runtimeMetrics.record("polling.fallback");
     return this.statusPages.getPublic(parseRequestBody(slugSchema, slug));
   }
 
@@ -60,6 +62,7 @@ export class StatusPageController {
       throw new HttpException("Too many live status connections", HttpStatus.TOO_MANY_REQUESTS);
     }
     this.openConnections += 1;
+    runtimeMetrics.record("sse.connection");
     this.sourceConnections.set(source, sourceCount + 1);
     response.status(200);
     response.setHeader("Content-Type", "text/event-stream");

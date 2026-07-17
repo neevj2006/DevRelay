@@ -19,6 +19,7 @@ import { ServiceMonitorService } from "./service-monitor.service.js";
 import { SessionGuard } from "./session.guard.js";
 import { StatusPageController } from "./status-page.controller.js";
 import { StatusPageService } from "./status-page.service.js";
+import { SystemHealthService } from "./system-health.service.js";
 
 @Module({
   controllers: [
@@ -42,6 +43,7 @@ import { StatusPageService } from "./status-page.service.js";
     SessionGuard,
     ServiceMonitorService,
     StatusPageService,
+    SystemHealthService,
     {
       provide: DatabaseService,
       useFactory: () => {
