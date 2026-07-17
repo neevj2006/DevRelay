@@ -1,6 +1,9 @@
 import { parseApiEnvironment } from "@devrelay/config";
 import { type QueueJob } from "@devrelay/contracts";
 import {
+  AvailabilityAggregationScheduler,
+  AvailabilityAggregator,
+  MaintenanceReconciler,
   MonitorCheckExecutor,
   MonitoringFreshnessDetector,
   MonitorScheduler,
@@ -59,6 +62,8 @@ export class QStashService {
     }).dispatchDue();
     await new OutboxDispatcher(this.database.client, queue, "qstash-hosted").dispatch();
     await new NotificationDeliveryDispatcher(this.database.client, queue).dispatchDue();
+    await new MaintenanceReconciler(this.database.client).reconcile();
+    await new AvailabilityAggregationScheduler(this.database.client, queue).dispatch();
     return scheduled;
   }
 
@@ -85,10 +90,10 @@ export class QStashService {
         workerId: "qstash-hosted",
       }).execute(job);
     }
+    if (job.name === "availability.aggregate")
+      return new AvailabilityAggregator(this.database.client).execute(job);
     if (job.name !== "monitor.check") {
-      throw new ServiceUnavailableException(
-        `Hosted handler for ${String(job.name)} is not active yet`,
-      );
+      throw new ServiceUnavailableException("Hosted handler is not active yet");
     }
     return new MonitorCheckExecutor(this.database.client, queue, "qstash-hosted", "hosted").execute(
       value,

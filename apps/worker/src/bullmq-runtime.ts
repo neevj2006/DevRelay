@@ -1,6 +1,7 @@
 import { type WorkerEnvironment } from "@devrelay/config";
 import { type QueueJob } from "@devrelay/contracts";
 import {
+  AvailabilityAggregator,
   MonitorCheckExecutor,
   NotificationDeliveryProcessor,
   NotificationFanoutProcessor,
@@ -18,6 +19,7 @@ export class BullMqWorkerRuntime {
     policyEngine: PolicyEngine,
     fanout: NotificationFanoutProcessor,
     notifications: NotificationDeliveryProcessor,
+    availability: AvailabilityAggregator,
   ) {
     const connection: ConnectionOptions = { url: environment.REDIS_URL! };
     const create = (name: QueueJob["name"], processor: Processor<QueueJob>) =>
@@ -52,7 +54,11 @@ export class BullMqWorkerRuntime {
         if (job.name !== "outbox.dispatch") throw new UnrecoverableError("Unexpected job");
         return fanout.execute(job);
       }),
-      create("availability.aggregate", async (bullJob) => validateQueueJob(bullJob.data)),
+      create("availability.aggregate", async (bullJob) => {
+        const job = validateQueueJob(bullJob.data);
+        if (job.name !== "availability.aggregate") throw new UnrecoverableError("Unexpected job");
+        return availability.execute(job);
+      }),
     ];
     for (const worker of this.workers) {
       worker.on("error", (error) =>

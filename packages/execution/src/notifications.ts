@@ -67,6 +67,16 @@ export function renderVerificationEmail(payload: Record<string, unknown>) {
   return { html, subject: `Confirm your subscription to ${title}`, text };
 }
 
+export function renderMaintenanceEmail(payload: Record<string, unknown>) {
+  const title = String(payload.title ?? "Scheduled maintenance");
+  const body = String(payload.body ?? "Planned maintenance has been scheduled.");
+  const statusUrl = String(payload.statusUrl ?? "");
+  const subject = `[Scheduled maintenance] ${title}`;
+  const text = `Scheduled maintenance: ${title}\n\n${body}\n\nView the latest status: ${statusUrl}`;
+  const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#0f172a"><main style="max-width:560px;margin:auto;padding:32px 20px"><p style="color:#6d28d9;font-weight:700">Scheduled maintenance</p><h1 style="font-size:24px">${escapeHtml(title)}</h1><p style="line-height:1.6">${escapeHtml(body)}</p><p><a href="${escapeHtml(statusUrl)}">View the latest status</a></p></main></body></html>`;
+  return { html, subject, text };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -349,7 +359,9 @@ export class NotificationDeliveryProcessor {
       : delivery.safe_payload;
     const rendered = payload.verifyUrl
       ? renderVerificationEmail(payload)
-      : renderIncidentEmail(payload);
+      : payload.notificationType === "maintenance"
+        ? renderMaintenanceEmail(payload)
+        : renderIncidentEmail(payload);
     if (this.options.resendApiKey) {
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",

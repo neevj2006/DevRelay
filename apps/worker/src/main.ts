@@ -1,6 +1,9 @@
 import { parseWorkerEnvironment } from "@devrelay/config";
 import { createDatabaseClient } from "@devrelay/database";
 import {
+  AvailabilityAggregationScheduler,
+  AvailabilityAggregator,
+  MaintenanceReconciler,
   MonitorCheckExecutor,
   MonitoringFreshnessDetector,
   MonitorScheduler,
@@ -37,17 +40,22 @@ const notificationOptions = {
 };
 const fanout = new NotificationFanoutProcessor(database, environment.APP_ORIGIN);
 const notificationProcessor = new NotificationDeliveryProcessor(database, notificationOptions);
+const availabilityAggregator = new AvailabilityAggregator(database);
 const runtime = new BullMqWorkerRuntime(
   environment,
   executor,
   policyEngine,
   fanout,
   notificationProcessor,
+  availabilityAggregator,
 );
 const scheduler = new MonitorScheduler(database, queue, { deploymentMode: "local" });
 const outbox = new OutboxDispatcher(database, queue, environment.WORKER_ID);
 const deliveries = new NotificationDeliveryDispatcher(database, queue);
 const freshness = new MonitoringFreshnessDetector(database, queue);
+const availability = new AvailabilityAggregationScheduler(database, queue);
+const maintenance = new MaintenanceReconciler(database);
+let lastAggregationDay: string | undefined;
 
 async function runMaintenance(): Promise<void> {
   await updateWorkerHeartbeat(database, {
@@ -56,14 +64,27 @@ async function runMaintenance(): Promise<void> {
     startedAt,
     workerId: environment.WORKER_ID,
   });
-  const [scheduled, dispatched, deliveryJobs, health] = await Promise.all([
+  const aggregationDay = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const [scheduled, dispatched, deliveryJobs, health, maintenanceState] = await Promise.all([
     scheduler.dispatchDue(),
     outbox.dispatch(),
     deliveries.dispatchDue(),
     freshness.inspect(),
+    maintenance.reconcile(),
   ]);
+  const aggregationJobs =
+    lastAggregationDay === aggregationDay ? 0 : await availability.dispatch(aggregationDay);
+  lastAggregationDay = aggregationDay;
   console.log(
-    JSON.stringify({ deliveryJobs, dispatched, event: "worker.heartbeat", health, scheduled }),
+    JSON.stringify({
+      aggregationJobs,
+      deliveryJobs,
+      dispatched,
+      event: "worker.heartbeat",
+      health,
+      maintenanceState,
+      scheduled,
+    }),
   );
 }
 

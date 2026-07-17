@@ -8,6 +8,8 @@ import { IncidentController } from "./incident.controller.js";
 import { IncidentService } from "./incident.service.js";
 import { NotificationController } from "./notification.controller.js";
 import { NotificationService } from "./notification.service.js";
+import { OperationsController, PublicPostmortemController } from "./operations.controller.js";
+import { OperationsService } from "./operations.service.js";
 import { OrganizationController } from "./organization.controller.js";
 import { OrganizationService } from "./organization.service.js";
 import { QStashController } from "./qstash.controller.js";
@@ -24,6 +26,8 @@ import { StatusPageService } from "./status-page.service.js";
     IncidentController,
     NotificationController,
     OrganizationController,
+    OperationsController,
+    PublicPostmortemController,
     QStashController,
     ServiceMonitorController,
     StatusPageController,
@@ -33,6 +37,7 @@ import { StatusPageService } from "./status-page.service.js";
     IncidentService,
     NotificationService,
     OrganizationService,
+    OperationsService,
     QStashService,
     SessionGuard,
     ServiceMonitorService,
