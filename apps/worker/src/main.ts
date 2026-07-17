@@ -3,6 +3,7 @@ import { createDatabaseClient } from "@devrelay/database";
 import {
   AvailabilityAggregationScheduler,
   AvailabilityAggregator,
+  configureLocalTracing,
   MaintenanceReconciler,
   MonitorCheckExecutor,
   MonitoringFreshnessDetector,
@@ -13,6 +14,7 @@ import {
   OutboxDispatcher,
   PolicyEngine,
   RetentionCleaner,
+  structuredLog,
   updateWorkerHeartbeat,
 } from "@devrelay/execution";
 import { BullMqJobQueue } from "@devrelay/queue";
@@ -20,6 +22,7 @@ import { BullMqJobQueue } from "@devrelay/queue";
 import { BullMqWorkerRuntime } from "./bullmq-runtime.js";
 
 const environment = parseWorkerEnvironment(process.env);
+configureLocalTracing();
 if (environment.QUEUE_ADAPTER !== "bullmq") {
   throw new Error(
     "The persistent worker supports the BullMQ adapter; QStash executes through signed API routes",
@@ -72,7 +75,7 @@ async function runMaintenance(): Promise<void> {
     workerId: environment.WORKER_ID,
   });
   const aggregationDay = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  const [scheduled, dispatched, deliveryJobs, health, maintenanceState] = await Promise.all([
+  const [scheduled, dispatched, deliveryJobs, health] = await Promise.all([
     scheduler.dispatchDue(),
     outbox.dispatch(),
     deliveries.dispatchDue(),
@@ -83,20 +86,13 @@ async function runMaintenance(): Promise<void> {
     lastAggregationDay === aggregationDay ? 0 : await availability.dispatch(aggregationDay);
   lastAggregationDay = aggregationDay;
   const retentionDay = new Date().toISOString().slice(0, 10);
-  const retentionResult = lastRetentionDay === retentionDay ? null : await retention.run();
+  if (lastRetentionDay !== retentionDay) await retention.run();
   lastRetentionDay = retentionDay;
-  console.log(
-    JSON.stringify({
-      aggregationJobs,
-      deliveryJobs,
-      dispatched,
-      event: "worker.heartbeat",
-      health,
-      maintenanceState,
-      retentionResult,
-      scheduled,
-    }),
-  );
+  structuredLog("info", "worker.heartbeat", {
+    count: scheduled.claimed + dispatched + deliveryJobs + aggregationJobs,
+    status: health.affectedServices > 0 ? "degraded" : "ok",
+    workerId: environment.WORKER_ID,
+  });
 }
 
 await runMaintenance();
@@ -107,7 +103,7 @@ const timer = setInterval(
 
 async function shutdown(signal: string): Promise<void> {
   clearInterval(timer);
-  console.log(JSON.stringify({ event: "worker.shutdown", signal }));
+  structuredLog("info", "worker.shutdown", { signal, workerId: environment.WORKER_ID });
   await runtime.close();
   await queue.close();
   await database.close();
@@ -115,12 +111,10 @@ async function shutdown(signal: string): Promise<void> {
 }
 
 function reportFatal(error: unknown): void {
-  console.error(
-    JSON.stringify({
-      error: error instanceof Error ? error.message : "unknown",
-      event: "worker.failure",
-    }),
-  );
+  structuredLog("error", "worker.failure", {
+    reason: error instanceof Error ? error.name : "unknown",
+    workerId: environment.WORKER_ID,
+  });
 }
 
 process.once("SIGINT", () => void shutdown("SIGINT"));

@@ -1,17 +1,18 @@
 import { Controller, Get } from "@nestjs/common";
 
-export interface HealthResponse {
-  service: "api";
-  status: "ok";
-}
+import { SystemHealthService } from "./system-health.service.js";
 
 @Controller()
 export class AppController {
+  constructor(private readonly health: SystemHealthService) {}
+
   @Get("health")
-  getHealth(): HealthResponse {
-    return {
-      service: "api",
-      status: "ok",
-    };
+  getHealth() {
+    return this.health.inspect();
+  }
+
+  @Get("health/metrics")
+  getMetrics() {
+    return this.health.metrics();
   }
 }

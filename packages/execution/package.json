@@ -20,6 +20,8 @@
     "@devrelay/database": "workspace:*",
     "@devrelay/monitoring": "workspace:*",
     "@devrelay/queue": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-trace-base": "2.9.0",
     "drizzle-orm": "0.45.2",
     "nodemailer": "^9.0.1",
     "pg": "8.22.0"

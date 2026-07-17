@@ -4,6 +4,8 @@ import { type MonitorCheckJob } from "@devrelay/contracts";
 import { type DatabaseClient } from "@devrelay/database";
 import { type JobQueue, monitorWindowId } from "@devrelay/queue";
 
+import { runtimeMetrics, structuredLog, withTrace } from "./observability.js";
+
 export type SchedulerOptions = {
   batchSize?: number;
   dailyMessageLimit?: number;
@@ -31,7 +33,16 @@ export class MonitorScheduler {
   ) {}
 
   async dispatchDue(now = new Date()): Promise<{ claimed: number; paused: boolean }> {
-    if (this.options.paused) return { claimed: 0, paused: true };
+    return withTrace("scheduler.dispatch", { queueAdapter: this.options.deploymentMode }, () =>
+      this.dispatchDueTraced(now),
+    );
+  }
+
+  private async dispatchDueTraced(now: Date): Promise<{ claimed: number; paused: boolean }> {
+    if (this.options.paused) {
+      structuredLog("warn", "scheduler.paused", { status: "paused" });
+      return { claimed: 0, paused: true };
+    }
     const client = await this.database.pool.connect();
     const claimed: MonitorCheckJob[] = [];
     try {
@@ -121,9 +132,13 @@ export class MonitorScheduler {
     );
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
+    const accepted = results.filter(
+      (result) => result.status === "fulfilled" && result.value.accepted,
+    ).length;
+    runtimeMetrics.record("check.expected", jobs.size);
+    structuredLog("info", "scheduler.dispatched", { count: accepted, status: "completed" });
     return {
-      claimed: results.filter((result) => result.status === "fulfilled" && result.value.accepted)
-        .length,
+      claimed: accepted,
       paused: false,
     };
   }
@@ -141,12 +156,16 @@ export class MonitorScheduler {
       [now],
     );
     const row = result.rows[0]!;
+    const lagMilliseconds = row.oldest_due_at
+      ? Math.max(0, now.getTime() - row.oldest_due_at.getTime())
+      : 0;
+    runtimeMetrics.record("queue.lag", lagMilliseconds, {
+      adapter: this.options.deploymentMode,
+    });
     return {
       dueMonitors: Number(row.due_count),
       expectedWindows: Number(row.expected_count),
-      lagMilliseconds: row.oldest_due_at
-        ? Math.max(0, now.getTime() - row.oldest_due_at.getTime())
-        : 0,
+      lagMilliseconds,
       paused: this.options.paused ?? false,
     };
   }

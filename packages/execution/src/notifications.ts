@@ -8,6 +8,8 @@ import type { JobQueue } from "@devrelay/queue";
 import { retryDelay } from "@devrelay/queue";
 import nodemailer from "nodemailer";
 
+import { runtimeMetrics, structuredLog, withTrace } from "./observability.js";
+
 export type NotificationRuntimeOptions = {
   appOrigin: string;
   emailFrom: string;
@@ -279,6 +281,21 @@ export class NotificationDeliveryProcessor {
   }
 
   async execute(job: NotificationDeliveryJob): Promise<{ status: string }> {
+    return withTrace(
+      "notification.deliver",
+      {
+        correlationId: job.correlationId,
+        deliveryId: job.payload.deliveryId,
+        jobId: job.id,
+        jobName: job.name,
+        organizationId: job.organizationId,
+      },
+      () => this.executeDelivery(job),
+    );
+  }
+
+  private async executeDelivery(job: NotificationDeliveryJob): Promise<{ status: string }> {
+    const startedAt = Date.now();
     const lease = new Date(Date.now() + 60_000);
     const claimed = await this.database.pool.query<Delivery>(
       `UPDATE notification_deliveries SET status='sending',lease_owner=$3,lease_expires_at=$4,updated_at=now()
@@ -287,7 +304,16 @@ export class NotificationDeliveryProcessor {
       [job.payload.deliveryId, job.organizationId, this.options.workerId, lease],
     );
     const delivery = claimed.rows[0];
-    if (!delivery) return { status: "duplicate" };
+    if (!delivery) {
+      runtimeMetrics.record("notification.duplicate");
+      structuredLog("info", "notification.delivery.duplicate", {
+        correlationId: job.correlationId,
+        deliveryId: job.payload.deliveryId,
+        organizationId: job.organizationId,
+        status: "duplicate",
+      });
+      return { status: "duplicate" };
+    }
     const attempts = await this.database.pool.query<{ count: number }>(
       "SELECT count(*)::int AS count FROM delivery_attempts WHERE organization_id=$1 AND delivery_id=$2",
       [job.organizationId, delivery.id],
@@ -311,6 +337,22 @@ export class NotificationDeliveryProcessor {
         `UPDATE notification_deliveries SET status='succeeded',completed_at=now(),lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=NULL,updated_at=now() WHERE id=$1`,
         [delivery.id],
       );
+      runtimeMetrics.record("notification.delivery.succeeded", 1, {
+        channel: delivery.channel,
+      });
+      runtimeMetrics.record("notification.delivery.duration", Date.now() - startedAt, {
+        channel: delivery.channel,
+        status: "succeeded",
+      });
+      structuredLog("info", "notification.delivery.succeeded", {
+        attempt: attemptNumber,
+        channel: delivery.channel,
+        correlationId: job.correlationId,
+        deliveryId: delivery.id,
+        durationMilliseconds: Date.now() - startedAt,
+        organizationId: job.organizationId,
+        status: "succeeded",
+      });
       return { status: "succeeded" };
     } catch (error) {
       const detail = classifyDeliveryError(error);
@@ -342,6 +384,24 @@ export class NotificationDeliveryProcessor {
           [delivery.subscriber_id, job.organizationId],
         );
       }
+      runtimeMetrics.record("notification.delivery.failed", 1, {
+        channel: delivery.channel,
+        status: final ? "permanent" : "retry",
+      });
+      runtimeMetrics.record("notification.delivery.duration", Date.now() - startedAt, {
+        channel: delivery.channel,
+        status: final ? "permanent" : "retry",
+      });
+      structuredLog(final ? "error" : "warn", "notification.delivery.failed", {
+        attempt: attemptNumber,
+        channel: delivery.channel,
+        correlationId: job.correlationId,
+        deliveryId: delivery.id,
+        durationMilliseconds: Date.now() - startedAt,
+        organizationId: job.organizationId,
+        reason: detail.code,
+        status: final ? "permanently_failed" : "retry_scheduled",
+      });
       return { status: final ? "permanently_failed" : "retry_scheduled" };
     }
   }

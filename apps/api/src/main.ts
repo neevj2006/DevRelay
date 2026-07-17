@@ -1,6 +1,14 @@
 import "reflect-metadata";
 
+import { randomUUID } from "node:crypto";
+
 import { parseApiEnvironment } from "@devrelay/config";
+import {
+  configureLocalTracing,
+  runtimeMetrics,
+  startTraceSpan,
+  structuredLog,
+} from "@devrelay/execution";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { NextFunction, Request, Response } from "express";
@@ -11,6 +19,7 @@ import { AuthService } from "./auth.service.js";
 import { createBoundedAuthHandler } from "./auth-handler.js";
 
 async function bootstrap(): Promise<void> {
+  configureLocalTracing();
   const environment = parseApiEnvironment(process.env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   const authService = app.get(AuthService);
@@ -23,6 +32,43 @@ async function bootstrap(): Promise<void> {
   }
 
   app.use((request: Request, response: Response, next: NextFunction) => {
+    const startedAt = Date.now();
+    const incomingCorrelationId = request.headers["x-correlation-id"];
+    const correlationId =
+      typeof incomingCorrelationId === "string" &&
+      /^[A-Za-z0-9:._-]{1,160}$/.test(incomingCorrelationId)
+        ? incomingCorrelationId
+        : randomUUID();
+    response.setHeader("X-Correlation-Id", correlationId);
+    const route = request.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id");
+    const span = startTraceSpan("http.request", {
+      correlationId,
+      method: request.method,
+      route,
+    });
+    response.once("finish", () => {
+      const durationMilliseconds = Date.now() - startedAt;
+      runtimeMetrics.record("api.request.total", 1, {
+        method: request.method,
+        route,
+        status: String(response.statusCode),
+      });
+      runtimeMetrics.record("api.request.duration", durationMilliseconds, {
+        method: request.method,
+        route,
+        status: String(response.statusCode),
+      });
+      if (response.statusCode >= 500) runtimeMetrics.record("api.request.error");
+      structuredLog(response.statusCode >= 500 ? "error" : "info", "api.request.completed", {
+        correlationId,
+        durationMilliseconds,
+        method: request.method,
+        route,
+        status: response.statusCode,
+      });
+      span.setAttribute("http.response.status_code", response.statusCode);
+      span.end();
+    });
     response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
     response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");

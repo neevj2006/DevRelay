@@ -12,6 +12,7 @@ import { type JobQueue, PermanentJobError, validateQueueJob } from "@devrelay/qu
 import type { PoolClient } from "pg";
 
 import { reconcileAutomaticIncident } from "./incident.js";
+import { runtimeMetrics, structuredLog, withTrace } from "./observability.js";
 
 type PolicyRow = {
   failure_impact: MonitorImpact;
@@ -44,7 +45,20 @@ export class PolicyEngine {
     if (parsed.name !== "policy.evaluate") {
       throw new PermanentJobError("Expected policy.evaluate job");
     }
-    const job: PolicyEvaluationJob = parsed;
+    return withTrace(
+      "policy.evaluate",
+      {
+        correlationId: parsed.correlationId,
+        jobId: parsed.id,
+        jobName: parsed.name,
+        monitorId: parsed.payload.monitorId,
+        organizationId: parsed.organizationId,
+      },
+      () => this.evaluatePolicy(parsed, now),
+    );
+  }
+
+  private async evaluatePolicy(job: PolicyEvaluationJob, now: Date) {
     const client = await this.database.pool.connect();
     try {
       await client.query("BEGIN");
@@ -122,6 +136,29 @@ export class PolicyEngine {
         servicePresentationState: service.currentState,
       });
       await client.query("COMMIT");
+      if (incident.action === "created") {
+        runtimeMetrics.record("incident.created");
+        runtimeMetrics.record(
+          "incident.recovery.duration",
+          Math.max(0, now.getTime() - incomingAt.getTime()),
+          { status: "detection" },
+        );
+      } else if (incident.action === "linked") runtimeMetrics.record("incident.duplicate");
+      if (incident.action === "resolved") {
+        runtimeMetrics.record(
+          "incident.recovery.duration",
+          Math.max(0, now.getTime() - incomingAt.getTime()),
+          { status: "recovery" },
+        );
+      }
+      structuredLog("info", "policy.evaluated", {
+        correlationId: job.correlationId,
+        jobId: job.id,
+        monitorId: job.payload.monitorId,
+        organizationId: job.organizationId,
+        outcome: evaluation.latestOutcome ?? "none",
+        status: evaluation.state,
+      });
       return { ignored: false, incident, monitorState: evaluation.state, service };
     } catch (error) {
       await client.query("ROLLBACK");
