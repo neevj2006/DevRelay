@@ -71,7 +71,7 @@ export class RetentionCleaner {
       const result = await deleteExpired(client, organizationId, resource, cutoff, now);
       await client.query(
         `UPDATE retention_cleanup_runs SET status='succeeded',deleted_count=$1,
-         completed_at=$2,updated_at=now() WHERE id=$3`,
+         completed_at=$2 WHERE id=$3`,
         [result, now, run.rows[0].id],
       );
       await client.query("COMMIT");

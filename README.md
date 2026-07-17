@@ -110,7 +110,7 @@ With local infrastructure running, execute every required check with one command
 pnpm check
 ```
 
-This verifies formatting, linting, import ordering, package boundaries, strict TypeScript, unit tests, PostgreSQL/Redis integration, and production builds.
+This verifies formatting, linting, import ordering, package boundaries, strict TypeScript, unit tests, PostgreSQL/Redis integration, rendered Chromium journeys, accessibility, responsive status pages, and production builds. Install the browser once with `pnpm exec playwright install chromium` when running outside CI.
 
 Individual commands are also available:
 
@@ -121,8 +121,15 @@ pnpm boundaries
 pnpm typecheck
 pnpm test
 pnpm test:integration
+pnpm test:e2e
 pnpm build
 ```
+
+## Reliability proof
+
+The Phase 14 proof covers 176 automated checks: 94 unit tests, 74 PostgreSQL/Redis integration tests, and 8 rendered browser scenarios across desktop and mobile Chromium. It exercises duplicate deliveries, concurrent incident creation, out-of-order results, interrupted database work, restarted queue clients, delivery retries and permanent failure, stopped monitoring, retention, role boundaries, keyboard operation, responsive layout, and axe accessibility scans.
+
+A representative local run on July 18, 2026 seeded 6,000 check windows/results and 2,000 audit events. `EXPLAIN ANALYZE` selected `check_results_recent_monitor_idx` and `audit_events_organization_timeline_idx`; retention removed the 90-day-expired slice within the five-second non-blocking gate. The focused fault-and-load suite completed in 1.15 seconds against local Docker PostgreSQL and Redis. See the [reliability evidence and fault matrix](docs/reliability.md) for the reproducible scenarios and pass criteria.
 
 ## License
 
