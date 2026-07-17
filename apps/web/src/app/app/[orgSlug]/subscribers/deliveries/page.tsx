@@ -1,5 +1,16 @@
+import type { CommunicationsData } from "@/components/communications-page";
 import { CommunicationsPage } from "@/components/communications-page";
+import { apiRequest } from "@/lib/auth-server";
 
-export default function DeliveryHistoryPage() {
-  return <CommunicationsPage defaultTab="deliveries" />;
+export default async function DeliveryHistoryPage({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>;
+}) {
+  const { orgSlug } = await params;
+  const response = await apiRequest(`/organizations/${orgSlug}/communications`);
+  const data = response.ok
+    ? ((await response.json()) as CommunicationsData)
+    : { deliveries: [], subscribers: [], webhooks: [] };
+  return <CommunicationsPage data={data} defaultTab="deliveries" orgSlug={orgSlug} />;
 }

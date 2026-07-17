@@ -1,6 +1,11 @@
 import { type WorkerEnvironment } from "@devrelay/config";
 import { type QueueJob } from "@devrelay/contracts";
-import { MonitorCheckExecutor, PolicyEngine } from "@devrelay/execution";
+import {
+  MonitorCheckExecutor,
+  NotificationDeliveryProcessor,
+  NotificationFanoutProcessor,
+  PolicyEngine,
+} from "@devrelay/execution";
 import { bullMqQueueName, classifyJobError, validateQueueJob } from "@devrelay/queue";
 import { type ConnectionOptions, type Processor, UnrecoverableError, Worker } from "bullmq";
 
@@ -11,6 +16,8 @@ export class BullMqWorkerRuntime {
     environment: WorkerEnvironment,
     executor: MonitorCheckExecutor,
     policyEngine: PolicyEngine,
+    fanout: NotificationFanoutProcessor,
+    notifications: NotificationDeliveryProcessor,
   ) {
     const connection: ConnectionOptions = { url: environment.REDIS_URL! };
     const create = (name: QueueJob["name"], processor: Processor<QueueJob>) =>
@@ -35,8 +42,16 @@ export class BullMqWorkerRuntime {
         }
       }),
       create("policy.evaluate", async (bullJob) => policyEngine.evaluate(bullJob.data)),
-      create("notification.deliver", async (bullJob) => validateQueueJob(bullJob.data)),
-      create("outbox.dispatch", async (bullJob) => validateQueueJob(bullJob.data)),
+      create("notification.deliver", async (bullJob) => {
+        const job = validateQueueJob(bullJob.data);
+        if (job.name !== "notification.deliver") throw new UnrecoverableError("Unexpected job");
+        return notifications.execute(job);
+      }),
+      create("outbox.dispatch", async (bullJob) => {
+        const job = validateQueueJob(bullJob.data);
+        if (job.name !== "outbox.dispatch") throw new UnrecoverableError("Unexpected job");
+        return fanout.execute(job);
+      }),
       create("availability.aggregate", async (bullJob) => validateQueueJob(bullJob.data)),
     ];
     for (const worker of this.workers) {

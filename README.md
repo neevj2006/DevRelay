@@ -98,6 +98,10 @@ pnpm --filter @devrelay/api qstash:schedule
 Keep `QSTASH_HOSTED_SCHEDULER_PAUSED=true` until the public endpoint and credentials are ready. The
 hosted dispatcher enforces both a bounded batch size and a daily message ceiling.
 
+## Subscriber notifications
+
+Local email is delivered to Mailpit over SMTP. Hosted deployments can set `RESEND_API_KEY`; provider idempotency keys are derived from the durable logical delivery record. Configure `NOTIFICATION_ENCRYPTION_KEY` before creating outgoing webhooks. Webhook receivers should follow the [signature verification guide](docs/outgoing-webhooks.md).
+
 ## Validation
 
 With local infrastructure running, execute every required check with one command:

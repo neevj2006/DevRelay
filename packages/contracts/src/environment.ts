@@ -13,6 +13,10 @@ const optionalNonEmptyString = z.preprocess(
   (value) => (value === "" ? undefined : value),
   z.string().min(1).optional(),
 );
+const optionalSecret = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(32).optional(),
+);
 
 export const webEnvironmentSchema = z.object({
   NEXT_PUBLIC_API_URL: z.url(),
@@ -31,6 +35,12 @@ export const apiEnvironmentSchema = z
     GITHUB_CLIENT_ID: optionalNonEmptyString,
     GITHUB_CLIENT_SECRET: optionalNonEmptyString,
     NODE_ENV: nodeEnvironmentSchema.default("development"),
+    NOTIFICATION_ENCRYPTION_KEY: optionalSecret,
+    RESEND_API_KEY: optionalNonEmptyString,
+    RESEND_WEBHOOK_SECRET: optionalNonEmptyString,
+    SMTP_HOST: z.string().min(1).default("127.0.0.1"),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(1025),
+    EMAIL_FROM: z.string().min(3).max(320).default("DevRelay <notifications@localhost>"),
     QSTASH_CURRENT_SIGNING_KEY: z.string().min(1).optional(),
     QSTASH_DELIVERY_BASE_URL: z.url().default("http://localhost:4000"),
     QSTASH_DAILY_MESSAGE_LIMIT: z.coerce.number().int().min(1).max(1_000).default(250),
@@ -47,6 +57,16 @@ export const apiEnvironmentSchema = z
         code: "custom",
         message: "AUTH_SECRET is required in production",
         path: ["AUTH_SECRET"],
+      });
+    }
+    if (
+      environment.NODE_ENV === "production" &&
+      environment.NOTIFICATION_ENCRYPTION_KEY === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "NOTIFICATION_ENCRYPTION_KEY is required in production",
+        path: ["NOTIFICATION_ENCRYPTION_KEY"],
       });
     }
     if (
@@ -84,6 +104,12 @@ export const workerEnvironmentSchema = z
   .object({
     DATABASE_URL: databaseUrlSchema,
     NODE_ENV: nodeEnvironmentSchema.default("development"),
+    APP_ORIGIN: z.url().default("http://localhost:3000"),
+    EMAIL_FROM: z.string().min(3).max(320).default("DevRelay <notifications@localhost>"),
+    NOTIFICATION_ENCRYPTION_KEY: optionalSecret,
+    RESEND_API_KEY: optionalNonEmptyString,
+    SMTP_HOST: z.string().min(1).default("127.0.0.1"),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(1025),
     QUEUE_ADAPTER: z.enum(workerQueueAdapterValues).default("bullmq"),
     REDIS_URL: redisUrlSchema.optional(),
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
@@ -91,6 +117,16 @@ export const workerEnvironmentSchema = z
     WORKER_ID: z.string().min(1).max(200).default("local-worker"),
   })
   .superRefine((environment, context) => {
+    if (
+      environment.NODE_ENV === "production" &&
+      environment.NOTIFICATION_ENCRYPTION_KEY === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "NOTIFICATION_ENCRYPTION_KEY is required in production",
+        path: ["NOTIFICATION_ENCRYPTION_KEY"],
+      });
+    }
     if (environment.QUEUE_ADAPTER === "bullmq" && environment.REDIS_URL === undefined) {
       context.addIssue({
         code: "custom",

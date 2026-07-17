@@ -18,9 +18,11 @@ export function StatusPageHeader({ slug, title }: { slug: string; title?: string
           {title ?? `${slug.replaceAll("-", " ")} status`}
         </Link>
         <ThemeSelector />
-        <Button size="sm" variant="outline">
-          <Bell aria-hidden="true" />
-          Subscribe
+        <Button asChild size="sm" variant="outline">
+          <Link href="#subscribe">
+            <Bell aria-hidden="true" />
+            Subscribe
+          </Link>
         </Button>
       </div>
     </header>

@@ -4,6 +4,9 @@ import {
   MonitorCheckExecutor,
   MonitoringFreshnessDetector,
   MonitorScheduler,
+  NotificationDeliveryDispatcher,
+  NotificationDeliveryProcessor,
+  NotificationFanoutProcessor,
   OutboxDispatcher,
   PolicyEngine,
   updateWorkerHeartbeat,
@@ -23,9 +26,27 @@ const database = createDatabaseClient(environment.DATABASE_URL, { max: 10 });
 const queue = new BullMqJobQueue({ connection: { url: environment.REDIS_URL! } });
 const executor = new MonitorCheckExecutor(database, queue, environment.WORKER_ID);
 const policyEngine = new PolicyEngine(database);
-const runtime = new BullMqWorkerRuntime(environment, executor, policyEngine);
+const notificationOptions = {
+  appOrigin: environment.APP_ORIGIN,
+  emailFrom: environment.EMAIL_FROM,
+  encryptionKey: environment.NOTIFICATION_ENCRYPTION_KEY,
+  resendApiKey: environment.RESEND_API_KEY,
+  smtpHost: environment.SMTP_HOST,
+  smtpPort: environment.SMTP_PORT,
+  workerId: environment.WORKER_ID,
+};
+const fanout = new NotificationFanoutProcessor(database, environment.APP_ORIGIN);
+const notificationProcessor = new NotificationDeliveryProcessor(database, notificationOptions);
+const runtime = new BullMqWorkerRuntime(
+  environment,
+  executor,
+  policyEngine,
+  fanout,
+  notificationProcessor,
+);
 const scheduler = new MonitorScheduler(database, queue, { deploymentMode: "local" });
 const outbox = new OutboxDispatcher(database, queue, environment.WORKER_ID);
+const deliveries = new NotificationDeliveryDispatcher(database, queue);
 const freshness = new MonitoringFreshnessDetector(database, queue);
 
 async function runMaintenance(): Promise<void> {
@@ -35,12 +56,15 @@ async function runMaintenance(): Promise<void> {
     startedAt,
     workerId: environment.WORKER_ID,
   });
-  const [scheduled, dispatched, health] = await Promise.all([
+  const [scheduled, dispatched, deliveryJobs, health] = await Promise.all([
     scheduler.dispatchDue(),
     outbox.dispatch(),
+    deliveries.dispatchDue(),
     freshness.inspect(),
   ]);
-  console.log(JSON.stringify({ dispatched, event: "worker.heartbeat", health, scheduled }));
+  console.log(
+    JSON.stringify({ deliveryJobs, dispatched, event: "worker.heartbeat", health, scheduled }),
+  );
 }
 
 await runMaintenance();

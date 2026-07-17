@@ -1,0 +1,4 @@
+ALTER TABLE "notification_deliveries" ADD COLUMN "lease_owner" text;--> statement-breakpoint
+ALTER TABLE "notification_deliveries" ADD COLUMN "lease_expires_at" timestamp (3) with time zone;--> statement-breakpoint
+ALTER TABLE "subscribers" ADD COLUMN "consent_source" text DEFAULT 'public_status_page' NOT NULL;--> statement-breakpoint
+ALTER TABLE "notification_deliveries" ADD CONSTRAINT "notification_deliveries_lease_consistent" CHECK ("notification_deliveries"."status" <> 'sending' OR ("notification_deliveries"."lease_owner" IS NOT NULL AND "notification_deliveries"."lease_expires_at" IS NOT NULL));

@@ -4,6 +4,10 @@ import {
   MonitorCheckExecutor,
   MonitoringFreshnessDetector,
   MonitorScheduler,
+  NotificationDeliveryDispatcher,
+  NotificationDeliveryProcessor,
+  NotificationFanoutProcessor,
+  OutboxDispatcher,
   PolicyEngine,
 } from "@devrelay/execution";
 import { QStashJobQueue } from "@devrelay/queue";
@@ -47,12 +51,15 @@ export class QStashService {
   async dispatchDue(): Promise<{ claimed: number; paused: boolean }> {
     const queue = this.requireQueue();
     await new MonitoringFreshnessDetector(this.database.client, queue).inspect();
-    return new MonitorScheduler(this.database.client, queue, {
+    const scheduled = await new MonitorScheduler(this.database.client, queue, {
       batchSize: this.environment.QSTASH_DISPATCH_BATCH_SIZE,
       dailyMessageLimit: this.environment.QSTASH_DAILY_MESSAGE_LIMIT,
       deploymentMode: "hosted",
       paused: this.environment.QSTASH_HOSTED_SCHEDULER_PAUSED === "true",
     }).dispatchDue();
+    await new OutboxDispatcher(this.database.client, queue, "qstash-hosted").dispatch();
+    await new NotificationDeliveryDispatcher(this.database.client, queue).dispatchDue();
+    return scheduled;
   }
 
   async executeJob(value: unknown) {
@@ -60,6 +67,23 @@ export class QStashService {
     const job = value as QueueJob;
     if (job.name === "policy.evaluate") {
       return new PolicyEngine(this.database.client).evaluate(value);
+    }
+    if (job.name === "outbox.dispatch") {
+      return new NotificationFanoutProcessor(
+        this.database.client,
+        this.environment.APP_ORIGIN,
+      ).execute(job);
+    }
+    if (job.name === "notification.deliver") {
+      return new NotificationDeliveryProcessor(this.database.client, {
+        appOrigin: this.environment.APP_ORIGIN,
+        emailFrom: this.environment.EMAIL_FROM,
+        encryptionKey: this.environment.NOTIFICATION_ENCRYPTION_KEY,
+        resendApiKey: this.environment.RESEND_API_KEY,
+        smtpHost: this.environment.SMTP_HOST,
+        smtpPort: this.environment.SMTP_PORT,
+        workerId: "qstash-hosted",
+      }).execute(job);
     }
     if (job.name !== "monitor.check") {
       throw new ServiceUnavailableException(
