@@ -1,8 +1,16 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check, FlaskConical, ShieldCheck } from "lucide-react";
-import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  FlaskConical,
+  LoaderCircle,
+  ShieldCheck,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { InlineFeedback } from "@/components/feedback";
 import { FormField } from "@/components/form-field";
@@ -28,10 +36,123 @@ import {
 const steps = ["Basics", "Request", "Policy", "Test", "Review"] as const;
 
 export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; serviceId: string }) {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("API health");
-  const [endpoint, setEndpoint] = useState("https://api.acme.test/health");
+  const [endpoint, setEndpoint] = useState("https://1.1.1.1/");
+  const [method, setMethod] = useState<"GET" | "HEAD">("GET");
+  const [timeout, setTimeoutValue] = useState(5000);
+  const [statusCodes, setStatusCodes] = useState("200-299");
+  const [interval, setIntervalValue] = useState(300);
+  const [failureThreshold, setFailureThreshold] = useState(3);
+  const [recoveryThreshold, setRecoveryThreshold] = useState(3);
   const [tested, setTested] = useState(false);
+  const [monitorId, setMonitorId] = useState<string | null>(null);
+  const [testSummary, setTestSummary] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function payload() {
+    const ranges = statusCodes
+      .split(",")
+      .map((value) => value.trim())
+      .map((value) => {
+        const [from, to = from] = value.split("-").map(Number);
+        return { from, to };
+      });
+    return {
+      endpointUrl: endpoint,
+      method,
+      name,
+      policy: {
+        acceptedStatusCodes: ranges,
+        failureImpact: "major_outage",
+        failureThreshold,
+        intervalSeconds: interval,
+        recoveryThreshold,
+        requestHeaders: {},
+        timeoutMilliseconds: timeout,
+      },
+      serviceId,
+    };
+  }
+
+  async function runTest() {
+    setBusy(true);
+    try {
+      const configuration = payload();
+      const saveResponse = await fetch(
+        monitorId
+          ? `/api/backend/organizations/${orgSlug}/monitors/${monitorId}`
+          : `/api/backend/organizations/${orgSlug}/monitors`,
+        {
+          body: JSON.stringify(
+            monitorId
+              ? {
+                  endpointUrl: configuration.endpointUrl,
+                  method,
+                  name,
+                  policy: configuration.policy,
+                }
+              : configuration,
+          ),
+          headers: { "content-type": "application/json" },
+          method: monitorId ? "PATCH" : "POST",
+        },
+      );
+      const saved = (await saveResponse.json().catch(() => null)) as {
+        id?: string;
+        message?: string;
+      } | null;
+      if (!saveResponse.ok || (!monitorId && !saved?.id)) {
+        toast.error(saved?.message ?? "Monitor configuration could not be saved.");
+        return;
+      }
+      const id = monitorId ?? saved!.id!;
+      setMonitorId(id);
+      const response = await fetch(`/api/backend/organizations/${orgSlug}/monitors/${id}/test`, {
+        method: "POST",
+      });
+      const evidence = (await response.json().catch(() => null)) as {
+        durationMilliseconds?: number;
+        httpStatusCode?: number;
+        message?: string;
+        ok?: boolean;
+        summary?: string;
+      } | null;
+      if (!response.ok) {
+        toast.error(evidence?.message ?? "The endpoint test was blocked or failed.");
+        return;
+      }
+      setTestSummary(
+        `${evidence?.summary ?? "Test completed"}${evidence?.httpStatusCode ? ` in ${evidence.durationMilliseconds} ms` : ""}. No response body was retained.`,
+      );
+      setTested(Boolean(evidence?.ok));
+      if (!evidence?.ok) toast.error("The endpoint did not satisfy the accepted status policy.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function activate() {
+    if (!monitorId) return;
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `/api/backend/organizations/${orgSlug}/monitors/${monitorId}/activate`,
+        { method: "POST" },
+      );
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) {
+        toast.error(body?.message ?? "The monitor could not be activated.");
+        return;
+      }
+      toast.success("Monitor activated");
+      router.push(`/app/${orgSlug}/services/${serviceId}`);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="space-y-6">
       <ol aria-label="Monitor creation progress" className="grid grid-cols-5 gap-2">
@@ -63,7 +184,13 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
             </CardHeader>
             <CardContent className="space-y-5">
               <FormField id="monitor-name" label="Monitor name" required>
-                <Input onChange={(event) => setName(event.target.value)} value={name} />
+                <Input
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setTested(false);
+                  }}
+                  value={name}
+                />
               </FormField>
               <FormField
                 description="Private, loopback, link-local, metadata, credential-bearing, and restricted-port targets are rejected."
@@ -99,7 +226,13 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
             <CardContent className="grid gap-5 sm:grid-cols-2">
               <div>
                 <Label htmlFor="method">HTTP method</Label>
-                <Select defaultValue="GET">
+                <Select
+                  onValueChange={(value) => {
+                    setMethod(value as "GET" | "HEAD");
+                    setTested(false);
+                  }}
+                  value={method}
+                >
                   <SelectTrigger className="mt-2 w-full" id="method">
                     <SelectValue />
                   </SelectTrigger>
@@ -114,7 +247,15 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                 id="timeout"
                 label="Timeout (ms)"
               >
-                <Input defaultValue="5000" min="500" type="number" />
+                <Input
+                  min="100"
+                  onChange={(event) => {
+                    setTimeoutValue(Number(event.target.value));
+                    setTested(false);
+                  }}
+                  type="number"
+                  value={timeout}
+                />
               </FormField>
               <FormField
                 className="sm:col-span-2"
@@ -122,7 +263,13 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                 id="status-codes"
                 label="Accepted status codes"
               >
-                <Input defaultValue="200-299" />
+                <Input
+                  onChange={(event) => {
+                    setStatusCodes(event.target.value);
+                    setTested(false);
+                  }}
+                  value={statusCodes}
+                />
               </FormField>
             </CardContent>
           </>
@@ -138,18 +285,45 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
             <CardContent className="space-y-5">
               <div className="grid gap-5 sm:grid-cols-3">
                 <FormField id="interval" label="Interval (seconds)">
-                  <Input defaultValue="60" min="60" type="number" />
+                  <Input
+                    min="10"
+                    onChange={(event) => {
+                      setIntervalValue(Number(event.target.value));
+                      setTested(false);
+                    }}
+                    type="number"
+                    value={interval}
+                  />
                 </FormField>
                 <FormField id="failure-threshold" label="Failures to confirm">
-                  <Input defaultValue="3" min="1" type="number" />
+                  <Input
+                    max="10"
+                    min="1"
+                    onChange={(event) => {
+                      setFailureThreshold(Number(event.target.value));
+                      setTested(false);
+                    }}
+                    type="number"
+                    value={failureThreshold}
+                  />
                 </FormField>
                 <FormField id="recovery-threshold" label="Successes to recover">
-                  <Input defaultValue="3" min="1" type="number" />
+                  <Input
+                    max="10"
+                    min="1"
+                    onChange={(event) => {
+                      setRecoveryThreshold(Number(event.target.value));
+                      setTested(false);
+                    }}
+                    type="number"
+                    value={recoveryThreshold}
+                  />
                 </FormField>
               </div>
               <div className="rounded-lg border bg-surface-subtle p-4 text-sm leading-6">
-                <strong>Policy preview:</strong> Check every 60 seconds. Open an incident after 3
-                consecutive failures. Resolve only after 3 consecutive successes.
+                <strong>Policy preview:</strong> Check every {interval} seconds with a {timeout} ms
+                timeout. Accept HTTP {statusCodes}. Open an incident after {failureThreshold}{" "}
+                consecutive failures. Resolve only after {recoveryThreshold} consecutive successes.
               </div>
             </CardContent>
           </>
@@ -165,7 +339,7 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
             <CardContent className="space-y-5">
               {tested ? (
                 <InlineFeedback
-                  description="HTTP 200 in 184 ms from the demo execution region. No response body was retained."
+                  description={testSummary}
                   title="Endpoint is reachable"
                   tone="success"
                 />
@@ -176,8 +350,12 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                   <p className="mt-1 text-sm text-muted-foreground">
                     The result becomes stale if the endpoint or policy changes.
                   </p>
-                  <Button className="mt-5" onClick={() => setTested(true)}>
-                    <FlaskConical aria-hidden="true" />
+                  <Button className="mt-5" disabled={busy} onClick={runTest}>
+                    {busy ? (
+                      <LoaderCircle aria-hidden="true" className="animate-spin" />
+                    ) : (
+                      <FlaskConical aria-hidden="true" />
+                    )}
                     Run test check
                   </Button>
                 </div>
@@ -205,15 +383,17 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Schedule</dt>
-                  <dd className="mt-1">Every 60 seconds</dd>
+                  <dd className="mt-1">Every {interval} seconds</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Policy</dt>
-                  <dd className="mt-1">3 failures / 3 successes</dd>
+                  <dd className="mt-1">
+                    {failureThreshold} failures / {recoveryThreshold} successes
+                  </dd>
                 </div>
               </dl>
               <InlineFeedback
-                description="Activating this monitor uses the fourth of five demo monitor slots."
+                description="The API enforces the hosted limit of five active monitors and a five-minute minimum interval."
                 title="Within free-tier limit"
                 tone="warning"
               />
@@ -237,11 +417,13 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
               Continue <ArrowRight aria-hidden="true" />
             </Button>
           ) : (
-            <Button asChild>
-              <Link href={`/app/${orgSlug}/services/${serviceId}`}>
+            <Button disabled={busy || !tested} onClick={activate}>
+              {busy ? (
+                <LoaderCircle aria-hidden="true" className="animate-spin" />
+              ) : (
                 <ShieldCheck aria-hidden="true" />
-                Activate monitor
-              </Link>
+              )}
+              Activate monitor
             </Button>
           )}
         </CardFooter>

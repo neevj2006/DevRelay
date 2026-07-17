@@ -14,5 +14,8 @@
     "lint": "eslint src",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "4.1.10"
   }
 }

@@ -16,6 +16,7 @@
     "@devrelay/config": "workspace:*",
     "@devrelay/contracts": "workspace:*",
     "@devrelay/database": "workspace:*",
+    "@devrelay/monitoring": "workspace:*",
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",

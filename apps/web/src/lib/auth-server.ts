@@ -21,14 +21,16 @@ export type SessionOrganization = {
   slug: string;
 };
 
-async function apiRequest(path: string) {
+export async function apiRequest(path: string, init?: RequestInit) {
   const requestHeaders = await headers();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
   return fetch(`${apiUrl}${path}`, {
     cache: "no-store",
+    ...init,
     headers: {
       cookie: requestHeaders.get("cookie") ?? "",
       origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+      ...init?.headers,
     },
   });
 }
