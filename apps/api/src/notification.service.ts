@@ -129,7 +129,7 @@ export class NotificationService {
           email: input.email,
           statusPageTitle: statusPage.title,
           verifyUrlCiphertext: encryptWebhookSecret(
-            `${this.environment.APP_ORIGIN}/status/${slug}/subscribe/verify?token=${token}`,
+            `${this.environment.APP_ORIGIN}/subscriptions/verify#token=${token}`,
             this.encryptionKey,
           ),
         };
@@ -182,7 +182,7 @@ export class NotificationService {
         );
         await client.query(
           `INSERT INTO subscriber_verification_tokens (organization_id,subscriber_id,purpose,token_hash,expires_at)
-          VALUES ($1,$2,'preferences',$3,now()+interval '365 days'),($1,$2,'unsubscribe',$4,now()+interval '365 days')`,
+          VALUES ($1,$2,'preferences',$3,now()+interval '30 days'),($1,$2,'unsubscribe',$4,now()+interval '30 days')`,
           [
             record.organization_id,
             record.subscriber_id,
@@ -326,6 +326,14 @@ export class NotificationService {
       "owner",
       "admin",
     ]);
+    await this.rateLimit(`webhook-create:${context.organizationId}`, 20, 86_400_000);
+    const existing = await this.database.client.pool.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM webhook_destinations WHERE organization_id=$1 AND state='active' AND deleted_at IS NULL",
+      [context.organizationId],
+    );
+    if ((existing.rows[0]?.count ?? 0) >= 10) {
+      throw new ConflictException("The active webhook destination limit has been reached");
+    }
     try {
       await validateEndpointDestination(input.endpointUrl);
     } catch (error) {
@@ -439,27 +447,40 @@ export class NotificationService {
     } catch {
       throw new ForbiddenException("Invalid provider webhook signature");
     }
-    const replay = await this.database.client.pool.query<{ count: number }>(
-      `INSERT INTO auth_rate_limits (key,count,last_request) VALUES ($1,1,$2)
-       ON CONFLICT (key) DO UPDATE SET count=auth_rate_limits.count+1,last_request=$2 RETURNING count`,
-      [`resend-event:${headers.id}`, Date.now()],
-    );
-    if ((replay.rows[0]?.count ?? 1) > 1) return { accepted: true, duplicate: true };
-    const providerId = event.data?.email_id;
-    if (!providerId) return { accepted: true };
-    if (
-      event.type === "email.bounced" ||
-      event.type === "email.complained" ||
-      event.type === "email.suppressed"
-    ) {
-      await this.database.client.pool.query(
-        `UPDATE subscribers s SET state='suppressed',suppressed_at=now(),updated_at=now()
-        FROM notification_deliveries d JOIN delivery_attempts a ON a.delivery_id=d.id AND a.organization_id=d.organization_id
-        WHERE a.provider_message_id=$1 AND d.subscriber_id=s.id AND d.organization_id=s.organization_id`,
-        [providerId],
+    const client = await this.database.client.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const replay = await client.query(
+        `INSERT INTO auth_rate_limits (key,count,last_request) VALUES ($1,1,$2)
+         ON CONFLICT (key) DO NOTHING RETURNING key`,
+        [`resend-event:${headers.id}`, Date.now()],
       );
+      if (!replay.rowCount) {
+        await client.query("COMMIT");
+        return { accepted: true, duplicate: true };
+      }
+      const providerId = event.data?.email_id;
+      if (
+        providerId &&
+        (event.type === "email.bounced" ||
+          event.type === "email.complained" ||
+          event.type === "email.suppressed")
+      ) {
+        await client.query(
+          `UPDATE subscribers s SET state='suppressed',suppressed_at=now(),updated_at=now()
+          FROM notification_deliveries d JOIN delivery_attempts a ON a.delivery_id=d.id AND a.organization_id=d.organization_id
+          WHERE a.provider_message_id=$1 AND d.subscriber_id=s.id AND d.organization_id=s.organization_id`,
+          [providerId],
+        );
+      }
+      await client.query("COMMIT");
+      return { accepted: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-    return { accepted: true };
   }
 
   private async rateLimit(key: string, maximum: number, windowMs: number) {

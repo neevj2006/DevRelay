@@ -402,6 +402,29 @@ export class MonitoringFreshnessDetector {
       const client = await this.database.pool.connect();
       try {
         await client.query("BEGIN");
+        await client.query(
+          "SELECT id FROM services WHERE organization_id = $1 AND id = $2 FOR UPDATE",
+          [service.organization_id, service.service_id],
+        );
+        if (!workerStale && !queueStale) {
+          const stillStale = await client.query(
+            `SELECT 1 FROM monitors m
+             JOIN monitor_policies p ON p.monitor_id = m.id AND p.organization_id = m.organization_id
+             LEFT JOIN monitor_policy_evaluations e ON e.monitor_id = m.id AND e.organization_id = m.organization_id
+             WHERE m.organization_id = $1 AND m.service_id = $2
+               AND m.status = 'active' AND m.deleted_at IS NULL AND
+               (e.id IS NULL OR e.fresh_until < $3 OR EXISTS (
+                 SELECT 1 FROM expected_check_windows w WHERE w.organization_id = m.organization_id
+                   AND w.monitor_id = m.id AND w.status = 'expired'
+                   AND (e.latest_scheduled_at IS NULL OR w.scheduled_at >= e.latest_scheduled_at)))
+             LIMIT 1`,
+            [service.organization_id, service.service_id, now],
+          );
+          if (!stillStale.rowCount) {
+            await client.query("COMMIT");
+            continue;
+          }
+        }
         const reason = workerStale
           ? "worker_heartbeat_stale"
           : queueStale

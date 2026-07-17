@@ -5,4 +5,5 @@ export * from "./maintenance.js";
 export * from "./notifications.js";
 export * from "./outbox.js";
 export * from "./policy.js";
+export * from "./retention.js";
 export * from "./scheduler.js";

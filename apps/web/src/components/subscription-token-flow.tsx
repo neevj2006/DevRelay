@@ -6,27 +6,36 @@ import { useEffect, useState } from "react";
 
 type Verification = { preferencesToken: string; unsubscribeToken: string; verified: true };
 
-export function SubscriptionTokenFlow({
-  mode,
-  token,
-}: {
-  mode: "verify" | "unsubscribe";
-  token: string;
-}) {
+export function SubscriptionTokenFlow({ mode }: { mode: "verify" | "unsubscribe" }) {
   const [result, setResult] = useState<Verification | { unsubscribed: true } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/subscriptions/${mode}`, {
-      body: JSON.stringify({ token }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    })
-      .then(async (response) => {
+    async function redeem() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const token = params.get("token");
+      window.history.replaceState(null, "", window.location.pathname);
+      if (!token) {
+        await Promise.resolve();
+        setFailed(true);
+        return;
+      }
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/subscriptions/${mode}`,
+          {
+            body: JSON.stringify({ token }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          },
+        );
         if (!response.ok) throw new Error();
         setResult(await response.json());
-      })
-      .catch(() => setFailed(true));
-  }, [mode, token]);
+      } catch {
+        setFailed(true);
+      }
+    }
+    void redeem();
+  }, [mode]);
   if (failed)
     return (
       <p role="alert" className="text-sm text-destructive">
@@ -45,13 +54,13 @@ export function SubscriptionTokenFlow({
         <div className="flex flex-wrap gap-3 text-sm">
           <Link
             className="text-text-link"
-            href={`/subscriptions/preferences?token=${result.preferencesToken}`}
+            href={`/subscriptions/preferences#token=${result.preferencesToken}`}
           >
             Choose service preferences
           </Link>
           <Link
             className="text-text-link"
-            href={`/subscriptions/unsubscribe?token=${result.unsubscribeToken}`}
+            href={`/subscriptions/unsubscribe#token=${result.unsubscribeToken}`}
           >
             Unsubscribe
           </Link>

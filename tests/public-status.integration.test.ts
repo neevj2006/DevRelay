@@ -59,6 +59,12 @@ describe("public status projection", () => {
       name: "Checkout",
       publicDescription: "Customer checkout",
     })) as { id: string };
+    const privateService = (await services.createService(userId, "public-cloud", {
+      displayOrder: 3,
+      isPublic: false,
+      name: "Private control plane",
+      publicDescription: "Not published",
+    })) as { id: string };
     const created = await incidents.createManual(userId, "public-cloud", {
       affectedServiceIds: [service.id],
       idempotencyKey: `incident-${randomUUID()}`,
@@ -87,6 +93,25 @@ describe("public status projection", () => {
     expect(serialized).not.toContain(created.id);
     expect(serialized).not.toContain("PRIVATE");
     expect(serialized).not.toContain("Internal checkout title");
+
+    const privateIncidentId = randomUUID();
+    await client.database.execute(sql`
+      INSERT INTO incidents
+        (id, organization_id, slug, title, source, severity, lifecycle,
+         automatic_fingerprint, creation_idempotency_key, started_at)
+      VALUES
+        (${privateIncidentId}, ${organization.id}, 'private-control-plane-outage',
+         'PRIVATE database credentials unavailable', 'automatic_monitor', 'major_outage',
+         'investigating', ${`private-${randomUUID()}`}, ${`private-${randomUUID()}`}, now())
+    `);
+    await client.database.execute(sql`
+      INSERT INTO incident_services
+        (organization_id, incident_id, service_id, impact, is_primary)
+      VALUES (${organization.id}, ${privateIncidentId}, ${privateService.id}, 'major_outage', true)
+    `);
+    const afterPrivateIncident = await statusPages.getPublic("public-cloud");
+    expect(JSON.stringify(afterPrivateIncident)).not.toContain("private-control-plane-outage");
+    expect(JSON.stringify(afterPrivateIncident)).not.toContain("PRIVATE database credentials");
 
     const incident = await statusPages.getPublicIncident(
       "public-cloud",

@@ -1,5 +1,7 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
 
 const allowedPorts = new Set(["", "80", "443"]);
 const forbiddenHeaderNames = new Set([
@@ -22,6 +24,20 @@ const allowedHeaderNames = new Set([
 
 export type EndpointAddress = { address: string; family: 4 | 6 };
 export type EndpointResolver = (hostname: string) => Promise<readonly EndpointAddress[]>;
+export type ResolvedEndpoint = { addresses: readonly EndpointAddress[]; url: URL };
+export type PinnedEndpointResponse = {
+  headers: Readonly<Record<string, string | undefined>>;
+  responseTooLarge: boolean;
+  status: number;
+};
+export type EndpointRequester = (options: {
+  body?: string;
+  destination: ResolvedEndpoint;
+  headers: Readonly<Record<string, string>>;
+  maxResponseBytes: number;
+  method: "GET" | "HEAD" | "POST";
+  timeoutMilliseconds: number;
+}) => Promise<PinnedEndpointResponse>;
 export type MonitorTestEvidence = {
   code: "http_response" | "network_error" | "response_too_large" | "too_many_redirects";
   durationMilliseconds: number;
@@ -195,6 +211,13 @@ export async function validateEndpointDestination(
   value: string,
   resolver: EndpointResolver = systemResolver,
 ): Promise<URL> {
+  return (await resolveEndpointDestination(value, resolver)).url;
+}
+
+export async function resolveEndpointDestination(
+  value: string,
+  resolver: EndpointResolver = systemResolver,
+): Promise<ResolvedEndpoint> {
   const url = normalizeEndpointUrl(value);
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
   const addresses = isIP(hostname)
@@ -212,8 +235,75 @@ export async function validateEndpointDestination(
       "forbidden_address",
     );
   }
-  return url;
+  return { addresses, url };
 }
+
+export function createPinnedLookup(address: EndpointAddress): LookupFunction {
+  return (_hostname, _options, callback) => callback(null, address.address, address.family);
+}
+
+export const requestPinnedEndpoint: EndpointRequester = async (options) => {
+  const address = options.destination.addresses[0];
+  if (!address) {
+    throw new EndpointPolicyError(
+      "Endpoint hostname returned no addresses",
+      "dns_resolution_failed",
+    );
+  }
+  const transport = options.destination.url.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise<PinnedEndpointResponse>((resolve, reject) => {
+    let settled = false;
+    const finish = (result: PinnedEndpointResponse) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const request = transport(
+      options.destination.url,
+      {
+        agent: false,
+        family: address.family,
+        headers: options.headers,
+        lookup: createPinnedLookup(address),
+        method: options.method,
+        signal: AbortSignal.timeout(options.timeoutMilliseconds),
+      },
+      (response) => {
+        const headers: Record<string, string | undefined> = {};
+        for (const [name, value] of Object.entries(response.headers)) {
+          headers[name] = Array.isArray(value) ? value.join(", ") : value;
+        }
+        let received = 0;
+        response.on("data", (chunk: Buffer) => {
+          received += chunk.byteLength;
+          if (received > options.maxResponseBytes) {
+            response.destroy();
+            finish({
+              headers,
+              responseTooLarge: true,
+              status: response.statusCode ?? 0,
+            });
+          }
+        });
+        response.on("end", () => {
+          finish({
+            headers,
+            responseTooLarge: false,
+            status: response.statusCode ?? 0,
+          });
+        });
+        response.on("error", (error) => {
+          if (!settled) reject(error);
+        });
+      },
+    );
+    request.on("error", (error) => {
+      if (!settled) reject(error);
+    });
+    if (options.body !== undefined) request.write(options.body);
+    request.end();
+  });
+};
 
 export async function runSafeMonitorTest(options: {
   endpointUrl: string;
@@ -222,67 +312,61 @@ export async function runSafeMonitorTest(options: {
   maxResponseBytes?: number;
   method: "GET" | "HEAD";
   resolver?: EndpointResolver;
+  requester?: EndpointRequester;
   timeoutMilliseconds: number;
 }): Promise<MonitorTestEvidence> {
   const startedAt = performance.now();
   const maxRedirects = options.maxRedirects ?? 3;
   const maxResponseBytes = options.maxResponseBytes ?? 65_536;
   const headers = validateRequestHeaders(options.headers ?? {});
+  const requester = options.requester ?? requestPinnedEndpoint;
   let currentUrl = options.endpointUrl;
   let redirectCount = 0;
 
   try {
     while (true) {
-      const validatedUrl = await validateEndpointDestination(currentUrl, options.resolver);
-      const response = await fetch(validatedUrl, {
+      const destination = await resolveEndpointDestination(currentUrl, options.resolver);
+      const response = await requester({
+        destination,
         headers,
+        maxResponseBytes,
         method: options.method,
-        redirect: "manual",
-        signal: AbortSignal.timeout(options.timeoutMilliseconds),
+        timeoutMilliseconds: options.timeoutMilliseconds,
       });
-      if (response.status >= 300 && response.status < 400 && response.headers.has("location")) {
+      const location = response.headers.location;
+      if (response.status >= 300 && response.status < 400 && location) {
         if (redirectCount >= maxRedirects) {
           return evidence(
             "too_many_redirects",
             false,
             response.status,
-            validatedUrl.href,
+            destination.url.href,
             redirectCount,
             startedAt,
             "Endpoint exceeded the redirect limit",
           );
         }
-        currentUrl = new URL(response.headers.get("location")!, validatedUrl).href;
+        currentUrl = new URL(location, destination.url).href;
         redirectCount += 1;
         continue;
       }
 
-      if (options.method !== "HEAD" && response.body) {
-        const reader = response.body.getReader();
-        let received = 0;
-        while (true) {
-          const chunk = await reader.read();
-          if (chunk.done) break;
-          received += chunk.value.byteLength;
-          if (received > maxResponseBytes) {
-            await reader.cancel();
-            return evidence(
-              "response_too_large",
-              false,
-              response.status,
-              validatedUrl.href,
-              redirectCount,
-              startedAt,
-              "Endpoint response exceeded the safe byte limit",
-            );
-          }
-        }
+      if (response.responseTooLarge) {
+        return evidence(
+          "response_too_large",
+          false,
+          response.status,
+          destination.url.href,
+          redirectCount,
+          startedAt,
+          "Endpoint response exceeded the safe byte limit",
+        );
       }
       return evidence(
         "http_response",
         true,
         response.status,
-        validatedUrl.href,
+        destination.url.href,
         redirectCount,
         startedAt,
         `Endpoint returned HTTP ${response.status}`,

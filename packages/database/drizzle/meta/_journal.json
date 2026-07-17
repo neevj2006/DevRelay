@@ -71,6 +71,13 @@
       "when": 1784280214230,
       "tag": "0009_mute_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784320604064,
+      "tag": "0010_awesome_gambit",
+      "breakpoints": true
     }
   ]
 }

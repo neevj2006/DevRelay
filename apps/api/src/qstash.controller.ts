@@ -13,8 +13,14 @@ export class QStashController {
     @Headers("upstash-signature") signature: string | undefined,
   ) {
     const body = rawBody(request);
-    await this.qstash.verify(body, signature, request.originalUrl);
-    return this.qstash.dispatchDue();
+    const claim = await this.qstash.verifyAndClaim(body, signature, request.originalUrl);
+    if (claim.duplicate) return { acknowledged: true, duplicate: true };
+    try {
+      return await this.qstash.dispatchDue();
+    } catch (error) {
+      await this.qstash.releaseClaim(claim.key);
+      throw error;
+    }
   }
 
   @Post("jobs")
@@ -24,8 +30,16 @@ export class QStashController {
     @Body() bodyValue: unknown,
   ) {
     const body = rawBody(request);
-    await this.qstash.verify(body, signature, request.originalUrl);
-    return this.qstash.executeJob(bodyValue instanceof Buffer ? JSON.parse(body) : bodyValue);
+    const claim = await this.qstash.verifyAndClaim(body, signature, request.originalUrl);
+    if (claim.duplicate) return { acknowledged: true, duplicate: true };
+    try {
+      return await this.qstash.executeJob(
+        bodyValue instanceof Buffer ? JSON.parse(body) : bodyValue,
+      );
+    } catch (error) {
+      await this.qstash.releaseClaim(claim.key);
+      throw error;
+    }
   }
 
   @Post("failure")
@@ -34,8 +48,8 @@ export class QStashController {
     @Headers("upstash-signature") signature: string | undefined,
   ) {
     const body = rawBody(request);
-    await this.qstash.verify(body, signature, request.originalUrl);
-    return { acknowledged: true };
+    const claim = await this.qstash.verifyAndClaim(body, signature, request.originalUrl);
+    return { acknowledged: true, duplicate: claim.duplicate };
   }
 
   @Get("health")
