@@ -4,6 +4,7 @@ import { parseApiEnvironment } from "@devrelay/config";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { toNodeHandler } from "better-auth/node";
+import { raw } from "express";
 
 import { AppModule } from "./app.module.js";
 import { AuthService } from "./auth.service.js";
@@ -18,7 +19,8 @@ async function bootstrap(): Promise<void> {
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     origin: environment.APP_ORIGIN,
   });
-  app.getHttpAdapter().all("/api/auth/{*any}", toNodeHandler(authService.auth));
+  app.getHttpAdapter().all("/api/auth/{*any}", toNodeHandler(authService.auth) as never);
+  app.use("/internal/qstash", raw({ limit: "256kb", type: "application/json" }));
   app.useBodyParser("json", { limit: "1mb" });
   app.useBodyParser("urlencoded", { extended: true, limit: "1mb" });
 

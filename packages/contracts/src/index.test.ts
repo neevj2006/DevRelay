@@ -170,6 +170,15 @@ describe("runtime environment contracts", () => {
       }).success,
     ).toBe(true);
     expect(
+      apiEnvironmentSchema.safeParse({
+        ...apiBase,
+        QSTASH_CURRENT_SIGNING_KEY: "current",
+        QSTASH_NEXT_SIGNING_KEY: "next",
+        QSTASH_TOKEN: "token",
+        QUEUE_ADAPTER: "qstash",
+      }).success,
+    ).toBe(true);
+    expect(
       workerEnvironmentSchema.safeParse({
         DATABASE_URL: apiBase.DATABASE_URL,
         QUEUE_ADAPTER: "qstash",

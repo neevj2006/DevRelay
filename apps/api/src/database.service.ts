@@ -3,7 +3,7 @@ import { Injectable, type OnModuleDestroy } from "@nestjs/common";
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
-  private readonly client: DatabaseClient;
+  readonly client: DatabaseClient;
 
   constructor(databaseUrl: string) {
     this.client = createDatabaseClient(databaseUrl);

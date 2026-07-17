@@ -32,7 +32,12 @@ export const apiEnvironmentSchema = z
     GITHUB_CLIENT_SECRET: optionalNonEmptyString,
     NODE_ENV: nodeEnvironmentSchema.default("development"),
     QSTASH_CURRENT_SIGNING_KEY: z.string().min(1).optional(),
+    QSTASH_DELIVERY_BASE_URL: z.url().default("http://localhost:4000"),
+    QSTASH_DAILY_MESSAGE_LIMIT: z.coerce.number().int().min(1).max(1_000).default(250),
+    QSTASH_DISPATCH_BATCH_SIZE: z.coerce.number().int().min(1).max(25).default(5),
+    QSTASH_HOSTED_SCHEDULER_PAUSED: z.enum(["true", "false"]).default("false"),
     QSTASH_NEXT_SIGNING_KEY: z.string().min(1).optional(),
+    QSTASH_TOKEN: z.string().min(1).optional(),
     QUEUE_ADAPTER: z.enum(workerQueueAdapterValues).default("bullmq"),
     REDIS_URL: redisUrlSchema.optional(),
   })
@@ -64,11 +69,12 @@ export const apiEnvironmentSchema = z
     if (
       environment.QUEUE_ADAPTER === "qstash" &&
       (environment.QSTASH_CURRENT_SIGNING_KEY === undefined ||
-        environment.QSTASH_NEXT_SIGNING_KEY === undefined)
+        environment.QSTASH_NEXT_SIGNING_KEY === undefined ||
+        environment.QSTASH_TOKEN === undefined)
     ) {
       context.addIssue({
         code: "custom",
-        message: "Both QStash signing keys are required for the QStash adapter",
+        message: "The QStash token and both signing keys are required for the QStash adapter",
         path: ["QSTASH_CURRENT_SIGNING_KEY"],
       });
     }

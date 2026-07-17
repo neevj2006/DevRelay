@@ -26,6 +26,7 @@ packages/
   config/       Validated environment contracts
   contracts/    Shared HTTP and job contracts
   database/     Database schema and access layer
+  execution/    Scheduler, monitor execution, heartbeat, and outbox services
   monitoring/   Check execution and policy domain
   queue/        Shared queue interface and adapters
   ui/           Shared source-owned components
@@ -77,6 +78,25 @@ pnpm infra:reset    # Stop containers and delete local development volumes
 ```
 
 `infra:reset` permanently deletes only the Docker volumes created by this Compose project.
+
+## Monitoring execution modes
+
+Local development uses BullMQ and Redis. The worker derives deterministic check windows, persists
+the expected window before enqueueing it, safely retries transient failures, and deduplicates the
+result by organization, monitor, and scheduled timestamp. Queue failures remain available for
+inspection, and pending database windows are republished after a scheduler interruption.
+
+Hosted deployments can set `QUEUE_ADAPTER=qstash` and configure the QStash token, current and next
+signing keys, and the public API base URL documented in `.env.example`. All hosted callbacks verify
+the QStash signature against the unparsed request body. Create or reconcile the single five-minute
+dispatcher schedule with:
+
+```powershell
+pnpm --filter @devrelay/api qstash:schedule
+```
+
+Keep `QSTASH_HOSTED_SCHEDULER_PAUSED=true` until the public endpoint and credentials are ready. The
+hosted dispatcher enforces both a bounded batch size and a daily message ceiling.
 
 ## Validation
 
