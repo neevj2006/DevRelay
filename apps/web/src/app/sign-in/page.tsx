@@ -98,8 +98,8 @@ export default async function SignInPage({
               </Link>
             </Button>
             <p className="text-center text-xs leading-5 text-muted-foreground">
-              By continuing, you acknowledge this is a portfolio demo with free-tier limits. Never
-              enter production secrets.
+              By continuing, you acknowledge this is an MVP demo with free-tier limits. Never enter
+              production secrets.
             </p>
           </CardContent>
           <CardFooter className="justify-center border-t pt-5 text-xs text-muted-foreground">

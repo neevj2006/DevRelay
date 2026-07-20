@@ -8,9 +8,7 @@ export function PublicFooter() {
       <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <Brand className="text-foreground" />
-          <p className="mt-2">
-            A portfolio-grade reliability platform built with open-source tools.
-          </p>
+          <p className="mt-2">An MVP reliability platform built with open-source tools.</p>
         </div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2">
           <Link className="hover:text-foreground" href="/status/acme">

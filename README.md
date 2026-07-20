@@ -171,7 +171,7 @@ Application-layer SSRF controls are not a substitute for a deny-by-default egres
 
 ## Roadmap
 
-The portfolio MVP intentionally defers TCP/DNS/TLS/domain/browser monitors, multi-region quorum checks, on-call rotations, Slack/Teams/SMS delivery, billing, custom domains, long-term archives, and advanced SLO burn-rate analytics. The next reliability priorities are network-level egress isolation, a supported tenant export/deletion workflow, and hosted performance sampling after enough real traffic exists to report meaningful numbers.
+The MVP intentionally defers TCP/DNS/TLS/domain/browser monitors, multi-region quorum checks, on-call rotations, Slack/Teams/SMS delivery, billing, custom domains, long-term archives, and advanced SLO burn-rate analytics. The next reliability priorities are network-level egress isolation, a supported tenant export/deletion workflow, and hosted performance sampling after enough real traffic exists to report meaningful numbers.
 
 ## License
 

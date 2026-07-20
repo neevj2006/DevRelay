@@ -1,6 +1,6 @@
 # Free-tier deployment budget
 
-DevRelay's public portfolio deployment is designed to remain at **₹0 per month**. It uses only provider free plans, has no automatic paid upgrades, and keeps the hosted scheduler paused until the production smoke test succeeds.
+DevRelay's public MVP deployment is designed to remain at **₹0 per month**. It uses only provider free plans, has no automatic paid upgrades, and keeps the hosted scheduler paused until the production smoke test succeeds.
 
 ## Provider ceilings
 
