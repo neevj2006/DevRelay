@@ -9,6 +9,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -56,10 +57,12 @@ type AppShellProps = {
 function OrganizationSwitcher({
   orgSlug,
   organizations,
+  canCreateOrganization,
   collapsed = false,
 }: {
   orgSlug: string;
   organizations: ReadonlyArray<{ name: string; slug: string }>;
+  canCreateOrganization: boolean;
   collapsed?: boolean;
 }) {
   const active = organizations.find((organization) => organization.slug === orgSlug) ?? {
@@ -96,6 +99,17 @@ function OrganizationSwitcher({
             </Link>
           </DropdownMenuItem>
         ))}
+        {canCreateOrganization ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/onboarding?intent=create">
+                <Plus aria-hidden="true" />
+                Add organization
+              </Link>
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -304,6 +318,7 @@ export function AppShell({
         </div>
         <div className="p-3">
           <OrganizationSwitcher
+            canCreateOrganization={!readOnly}
             collapsed={collapsed}
             organizations={organizations}
             orgSlug={orgSlug}
@@ -357,7 +372,11 @@ export function AppShell({
                 <SheetDescription>Navigate {organizationName} operations.</SheetDescription>
               </SheetHeader>
               <div className="p-4">
-                <OrganizationSwitcher organizations={organizations} orgSlug={orgSlug} />
+                <OrganizationSwitcher
+                  canCreateOrganization={!readOnly}
+                  organizations={organizations}
+                  orgSlug={orgSlug}
+                />
               </div>
               <div className="overflow-y-auto px-4 pb-6">
                 <Navigation orgSlug={orgSlug} role={role} />

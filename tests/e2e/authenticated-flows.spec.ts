@@ -10,7 +10,9 @@ test.beforeEach(async ({ context }) => {
   ]);
 });
 
-test("sign-in and organization onboarding remain keyboard-operable", async ({ page }) => {
+test("sign-in routes members to their organizations and keeps onboarding keyboard-operable", async ({
+  page,
+}) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
@@ -32,6 +34,13 @@ test("sign-in and organization onboarding remain keyboard-operable", async ({ pa
     .context()
     .addCookies([{ name: "devrelay.session_token", url: "http://127.0.0.1:3000", value: "mock" }]);
   await page.goto("/onboarding");
+  await expect(page).toHaveURL(/\/app\/northstar-cloud$/);
+  await page.getByRole("button", { name: "Current organization: Northstar Cloud" }).click();
+  await expect(page.getByRole("menuitem", { name: "Northstar Cloud" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Member Cloud" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Team Cloud" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Add organization" }).click();
+  await expect(page).toHaveURL(/\/onboarding\?intent=create$/);
   await expect(page.getByText("Create your organization", { exact: true })).toBeVisible();
   await page.getByLabel("Organization name").fill("Northstar Labs");
   await expect(page.getByLabel("Organization slug")).toHaveValue("northstar-labs");
@@ -41,6 +50,31 @@ test("sign-in and organization onboarding remain keyboard-operable", async ({ pa
   await expect(page.getByText("Northstar Labs is ready", { exact: true })).toBeVisible();
   await expect(page.getByText(/workspace will start empty/i)).toBeVisible();
   expect(consoleErrors).toEqual([]);
+});
+
+test("users without an organization are sent to onboarding", async ({ context, page }) => {
+  await context.clearCookies();
+  await context.addCookies([
+    { name: "devrelay.session_token", url: "http://127.0.0.1:3000", value: "mock-empty" },
+  ]);
+
+  await page.goto("/app");
+
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(page.getByText("Create your organization", { exact: true })).toBeVisible();
+});
+
+test("the mobile organization switcher lists memberships and the add action", async ({ page }) => {
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.goto("/app/team-cloud");
+
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Current organization: Team Cloud" }).click();
+
+  await expect(page.getByRole("menuitem", { name: "Northstar Cloud" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Member Cloud" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Team Cloud" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Add organization" })).toBeVisible();
 });
 
 test("a newly created organization starts with an empty real-data dashboard", async ({ page }) => {
