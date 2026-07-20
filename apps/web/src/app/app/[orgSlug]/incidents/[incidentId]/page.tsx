@@ -10,6 +10,7 @@ import { Timeline, TimelineEvent } from "@/components/timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest } from "@/lib/auth-server";
+import { isPublicDemoOrganization } from "@/lib/demo";
 
 type Incident = {
   id: string;
@@ -42,6 +43,7 @@ export default async function IncidentConsolePage({
   params: Promise<{ orgSlug: string; incidentId: string }>;
 }) {
   const { orgSlug, incidentId } = await params;
+  const readOnly = isPublicDemoOrganization(orgSlug);
   const response = await apiRequest(`/organizations/${orgSlug}/incidents/${incidentId}`);
   if (response.status === 404) notFound();
   if (!response.ok) throw new Error("Incident unavailable");
@@ -71,19 +73,23 @@ export default async function IncidentConsolePage({
     <div className="space-y-6">
       <PageHeader
         actions={
-          <>
-            <IncidentTransitionActions
-              incidentId={incident.id}
-              lifecycle={incident.lifecycle}
-              orgSlug={orgSlug}
-            />
-            {(incident.lifecycle === "resolved" ||
-              incident.lifecycle === "postmortem_published") && (
-              <Button asChild variant="outline">
-                <Link href={`/app/${orgSlug}/incidents/${incident.id}/postmortem`}>Postmortem</Link>
-              </Button>
-            )}
-          </>
+          readOnly ? undefined : (
+            <>
+              <IncidentTransitionActions
+                incidentId={incident.id}
+                lifecycle={incident.lifecycle}
+                orgSlug={orgSlug}
+              />
+              {(incident.lifecycle === "resolved" ||
+                incident.lifecycle === "postmortem_published") && (
+                <Button asChild variant="outline">
+                  <Link href={`/app/${orgSlug}/incidents/${incident.id}/postmortem`}>
+                    Postmortem
+                  </Link>
+                </Button>
+              )}
+            </>
+          )
         }
         description={`${incident.services.map((service) => service.name).join(" and ")} · ${incident.source.replaceAll("_", " ")}`}
         title={incident.title}
@@ -98,11 +104,13 @@ export default async function IncidentConsolePage({
       </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-8">
-          <IncidentComposers
-            incidentId={incident.id}
-            lifecycle={incident.lifecycle}
-            orgSlug={orgSlug}
-          />
+          {!readOnly ? (
+            <IncidentComposers
+              incidentId={incident.id}
+              lifecycle={incident.lifecycle}
+              orgSlug={orgSlug}
+            />
+          ) : null}
           <section aria-labelledby="timeline-title">
             <h2 className="mb-5 text-xl font-semibold" id="timeline-title">
               Authoritative timeline

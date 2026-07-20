@@ -35,6 +35,15 @@ const incident = {
   updatedAt: now,
 };
 
+const service = {
+  ...incident.services[0],
+  activeIncidentCount: 1,
+  availability: 99.91,
+  lastCheckAt: now,
+  monitorCount: 1,
+  publicDescription: "Customer-facing API",
+};
+
 const statusPage = {
   activeIncidents: [
     {
@@ -77,6 +86,8 @@ const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", "http://127.0.0.1:4000");
   if (request.method === "OPTIONS") return json(response, 204, {});
   if (url.pathname === "/health") return json(response, 200, { service: "mock-api", status: "ok" });
+  if (url.pathname === "/api/auth/get-session" && !request.headers.cookie)
+    return json(response, 200, null);
   if (url.pathname === "/api/auth/get-session")
     return json(response, 200, {
       session: { expiresAt: "2027-01-01T00:00:00.000Z", id: "session-1", userId: "user-1" },
@@ -93,14 +104,23 @@ const server = createServer((request, response) => {
     return json(response, 200, [
       { id: "org-1", name: "Acme Cloud", role: "owner", slug: "acme" },
       { id: "org-2", name: "Member Cloud", role: "member", slug: "member-cloud" },
+      { id: "org-3", name: "Team Cloud", role: "owner", slug: "team-cloud" },
+      { id: "org-4", name: "Empty Cloud", role: "owner", slug: "empty-cloud" },
     ]);
   if (url.pathname === "/status/acme") return json(response, 200, statusPage);
   if (url.pathname === "/status/acme/incidents/api-errors-elevated")
     return json(response, 200, incident);
   if (url.pathname.endsWith(`/incidents/${incident.id}`) && request.method === "GET")
     return json(response, 200, incident);
+  if (/\/organizations\/[^/]+\/incidents$/.test(url.pathname) && request.method === "GET")
+    return json(response, 200, url.pathname.includes("/empty-cloud/") ? [] : [incident]);
+  if (
+    /\/organizations\/[^/]+\/operations\/maintenance$/.test(url.pathname) &&
+    request.method === "GET"
+  )
+    return json(response, 200, []);
   if (/\/organizations\/[^/]+\/services$/.test(url.pathname) && request.method === "GET")
-    return json(response, 200, [incident.services[0]]);
+    return json(response, 200, url.pathname.includes("/empty-cloud/") ? [] : [service]);
   if (request.method === "POST" && url.pathname.endsWith("/monitors"))
     return json(response, 201, { id: "33333333-3333-4333-8333-333333333333" });
   if (request.method === "POST" && url.pathname.endsWith("/test"))

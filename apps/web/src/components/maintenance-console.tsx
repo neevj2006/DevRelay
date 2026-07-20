@@ -21,10 +21,12 @@ export type MaintenanceWindow = {
 export function MaintenanceConsole({
   initialWindows,
   orgSlug,
+  readOnly = false,
   services,
 }: {
   initialWindows: MaintenanceWindow[];
   orgSlug: string;
+  readOnly?: boolean;
   services: { id: string; name: string }[];
 }) {
   const [windows, setWindows] = useState(initialWindows);
@@ -111,57 +113,59 @@ export function MaintenanceConsole({
         title="Maintenance"
         description="Plan customer-visible work; active windows override the displayed state while raw evidence continues."
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Schedule maintenance</CardTitle>
-          <CardDescription>
-            All dates are stored and displayed in UTC. End time must be after start time.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={submit} className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="maintenance-title">Title</Label>
-              <Input id="maintenance-title" name="title" required />
-            </div>
-            <div>
-              <Label htmlFor="maintenance-description">Public description</Label>
-              <Textarea id="maintenance-description" name="publicDescription" required />
-            </div>
-            <div>
-              <Label htmlFor="maintenance-start">Starts (local input)</Label>
-              <Input id="maintenance-start" name="startsAt" type="datetime-local" required />
-            </div>
-            <div>
-              <Label htmlFor="maintenance-end">Ends (local input)</Label>
-              <Input id="maintenance-end" name="endsAt" type="datetime-local" required />
-            </div>
-            <fieldset className="md:col-span-2">
-              <legend className="mb-2 text-sm font-medium">Affected services</legend>
-              <div className="flex flex-wrap gap-4">
-                {services.map((service) => (
-                  <label className="flex items-center gap-2 text-sm" key={service.id}>
-                    <input name="serviceIds" type="checkbox" value={service.id} />
-                    {service.name}
-                  </label>
-                ))}
+      {!readOnly ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Schedule maintenance</CardTitle>
+            <CardDescription>
+              All dates are stored and displayed in UTC. End time must be after start time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={submit} className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="maintenance-title">Title</Label>
+                <Input id="maintenance-title" name="title" required />
               </div>
-            </fieldset>
-            <label className="flex items-center gap-2 text-sm">
-              <input name="notifySubscribers" type="checkbox" />
-              Notify opted-in subscribers
-            </label>
-            <div className="md:col-span-2">
-              <Button type="submit">Schedule maintenance</Button>
-            </div>
-          </form>
-          {message && (
-            <p aria-live="polite" className="mt-4 text-sm">
-              {message}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+              <div>
+                <Label htmlFor="maintenance-description">Public description</Label>
+                <Textarea id="maintenance-description" name="publicDescription" required />
+              </div>
+              <div>
+                <Label htmlFor="maintenance-start">Starts (local input)</Label>
+                <Input id="maintenance-start" name="startsAt" type="datetime-local" required />
+              </div>
+              <div>
+                <Label htmlFor="maintenance-end">Ends (local input)</Label>
+                <Input id="maintenance-end" name="endsAt" type="datetime-local" required />
+              </div>
+              <fieldset className="md:col-span-2">
+                <legend className="mb-2 text-sm font-medium">Affected services</legend>
+                <div className="flex flex-wrap gap-4">
+                  {services.map((service) => (
+                    <label className="flex items-center gap-2 text-sm" key={service.id}>
+                      <input name="serviceIds" type="checkbox" value={service.id} />
+                      {service.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="flex items-center gap-2 text-sm">
+                <input name="notifySubscribers" type="checkbox" />
+                Notify opted-in subscribers
+              </label>
+              <div className="md:col-span-2">
+                <Button type="submit">Schedule maintenance</Button>
+              </div>
+            </form>
+            {message && (
+              <p aria-live="polite" className="mt-4 text-sm">
+                {message}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
       <section aria-labelledby="maintenance-list">
         <h2 className="mb-4 text-xl font-semibold" id="maintenance-list">
           Scheduled and past windows
@@ -175,12 +179,12 @@ export function MaintenanceConsole({
                     <div>
                       <CardTitle>{item.title}</CardTitle>
                       <CardDescription>
-                        {new Date(item.startsAt).toISOString().replace("T", " ").slice(0, 16)} –{" "}
+                        {new Date(item.startsAt).toISOString().replace("T", " ").slice(0, 16)} -{" "}
                         {new Date(item.endsAt).toISOString().replace("T", " ").slice(0, 16)} UTC ·{" "}
                         {item.status}
                       </CardDescription>
                     </div>
-                    {item.status === "scheduled" && (
+                    {!readOnly && item.status === "scheduled" && (
                       <div className="flex gap-2">
                         <Button onClick={() => void edit(item)} variant="outline">
                           Edit

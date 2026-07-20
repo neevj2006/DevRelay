@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/auth-server";
+import { isPublicDemoOrganization } from "@/lib/demo";
 
 type Monitor = {
   endpointUrl: string;
@@ -39,6 +40,7 @@ export default async function ServiceDetailPage({
   params: Promise<{ orgSlug: string; serviceId: string }>;
 }) {
   const { orgSlug, serviceId } = await params;
+  const readOnly = isPublicDemoOrganization(orgSlug);
   const response = await apiRequest(`/organizations/${orgSlug}/services/${serviceId}`);
   if (response.status === 404) notFound();
   if (!response.ok) throw new Error("Service data could not be loaded");
@@ -54,12 +56,14 @@ export default async function ServiceDetailPage({
                 Public page
               </Link>
             </Button>
-            <Button asChild>
-              <Link href={`/app/${orgSlug}/services/${service.id}/monitors/new`}>
-                <Plus />
-                Add monitor
-              </Link>
-            </Button>
+            {!readOnly ? (
+              <Button asChild>
+                <Link href={`/app/${orgSlug}/services/${service.id}/monitors/new`}>
+                  <Plus />
+                  Add monitor
+                </Link>
+              </Button>
+            ) : null}
           </>
         }
         description={service.publicDescription ?? "No public description"}
@@ -110,11 +114,13 @@ export default async function ServiceDetailPage({
                 </CardHeader>
                 <CardContent>
                   <p className="mb-4 text-sm text-muted-foreground">{monitor.policyPreview}</p>
-                  <MonitorActions
-                    monitorId={monitor.id}
-                    orgSlug={orgSlug}
-                    status={monitor.status}
-                  />
+                  {!readOnly ? (
+                    <MonitorActions
+                      monitorId={monitor.id}
+                      orgSlug={orgSlug}
+                      status={monitor.status}
+                    />
+                  ) : null}
                 </CardContent>
               </Card>
             ))

@@ -93,7 +93,7 @@ export default async function SignInPage({
               <Separator className="flex-1" />
             </div>
             <Button asChild className="w-full" size="lg" variant="outline">
-              <Link href="/status/acme">
+              <Link href="/app/acme">
                 Open seeded demo <ArrowRight aria-hidden="true" />
               </Link>
             </Button>

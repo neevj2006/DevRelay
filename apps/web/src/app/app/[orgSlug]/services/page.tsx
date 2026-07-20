@@ -8,6 +8,7 @@ import { ResponsiveDataTable } from "@/components/responsive-data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/auth-server";
+import { isPublicDemoOrganization } from "@/lib/demo";
 
 type ServiceRow = {
   activeIncidentCount: number;
@@ -28,6 +29,7 @@ export default async function ServicesPage({
   searchParams: Promise<{ state?: string }>;
 }) {
   const [{ orgSlug }, { state }] = await Promise.all([params, searchParams]);
+  const readOnly = isPublicDemoOrganization(orgSlug);
   let services: ServiceRow[] = [];
   let loadFailed = false;
   if (!state) {
@@ -43,12 +45,14 @@ export default async function ServicesPage({
     <div className="space-y-8">
       <PageHeader
         actions={
-          <Button asChild>
-            <Link href={`/app/${orgSlug}/services/new`}>
-              <Plus aria-hidden="true" />
-              Create service
-            </Link>
-          </Button>
+          readOnly ? undefined : (
+            <Button asChild>
+              <Link href={`/app/${orgSlug}/services/new`}>
+                <Plus aria-hidden="true" />
+                Create service
+              </Link>
+            </Button>
+          )
         }
         description="Customer-facing systems, their monitors, and current communication state."
         title="Services"
@@ -63,12 +67,14 @@ export default async function ServicesPage({
       {state === "empty" || (!state && !loadFailed && services.length === 0) ? (
         <EmptyState
           action={
-            <Button asChild>
-              <Link href={`/app/${orgSlug}/services/new`}>
-                <Plus aria-hidden="true" />
-                Create first service
-              </Link>
-            </Button>
+            readOnly ? undefined : (
+              <Button asChild>
+                <Link href={`/app/${orgSlug}/services/new`}>
+                  <Plus aria-hidden="true" />
+                  Create first service
+                </Link>
+              </Button>
+            )
           }
           description="Create a service to organize monitors, incidents, and public status history."
           title="No services yet"
@@ -139,16 +145,20 @@ export default async function ServicesPage({
                     ? new Date(service.lastCheckAt).toLocaleString()
                     : "No evidence",
               },
-              {
-                id: "actions",
-                header: "",
-                className: "text-right",
-                cell: () => (
-                  <Button aria-label="Open service actions" size="icon-sm" variant="ghost">
-                    <MoreHorizontal aria-hidden="true" />
-                  </Button>
-                ),
-              },
+              ...(readOnly
+                ? []
+                : [
+                    {
+                      id: "actions",
+                      header: "",
+                      className: "text-right",
+                      cell: () => (
+                        <Button aria-label="Open service actions" size="icon-sm" variant="ghost">
+                          <MoreHorizontal aria-hidden="true" />
+                        </Button>
+                      ),
+                    },
+                  ]),
             ]}
             getRowKey={(service) => service.id}
             rows={services}

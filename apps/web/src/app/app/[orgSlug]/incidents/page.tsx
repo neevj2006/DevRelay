@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { ResponsiveDataTable } from "@/components/responsive-data-table";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/auth-server";
+import { isPublicDemoOrganization } from "@/lib/demo";
 
 type Incident = {
   id: string;
@@ -26,6 +27,7 @@ type Incident = {
 
 export default async function IncidentsPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
+  const readOnly = isPublicDemoOrganization(orgSlug);
   let incidents: Incident[] | null = null;
   try {
     const response = await apiRequest(`/organizations/${orgSlug}/incidents`);
@@ -35,12 +37,14 @@ export default async function IncidentsPage({ params }: { params: Promise<{ orgS
     <div className="space-y-8">
       <PageHeader
         actions={
-          <Button asChild>
-            <Link href={`/app/${orgSlug}/incidents/new`}>
-              <Plus aria-hidden="true" />
-              Create incident
-            </Link>
-          </Button>
+          readOnly ? undefined : (
+            <Button asChild>
+              <Link href={`/app/${orgSlug}/incidents/new`}>
+                <Plus aria-hidden="true" />
+                Create incident
+              </Link>
+            </Button>
+          )
         }
         description="Active response, historical outcomes, and customer communication."
         title="Incidents"

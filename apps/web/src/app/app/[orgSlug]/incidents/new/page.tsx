@@ -1,6 +1,7 @@
 import { IncidentForm } from "@/components/incident-form";
 import { PageHeader } from "@/components/page-header";
 import { apiRequest } from "@/lib/auth-server";
+import { isPublicDemoOrganization } from "@/lib/demo";
 
 export default async function NewIncidentPage({
   params,
@@ -8,6 +9,7 @@ export default async function NewIncidentPage({
   params: Promise<{ orgSlug: string }>;
 }) {
   const { orgSlug } = await params;
+  if (isPublicDemoOrganization(orgSlug)) redirect(`/app/${orgSlug}/incidents`);
   const response = await apiRequest(`/organizations/${orgSlug}/services`);
   const services = response.ok ? ((await response.json()) as { id: string; name: string }[]) : [];
   return (
@@ -20,3 +22,4 @@ export default async function NewIncidentPage({
     </div>
   );
 }
+import { redirect } from "next/navigation";

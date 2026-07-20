@@ -1,8 +1,12 @@
+import { redirect } from "next/navigation";
+
 import { PageHeader } from "@/components/page-header";
 import { ServiceForm } from "@/components/service-form";
+import { isPublicDemoOrganization } from "@/lib/demo";
 
 export default async function NewServicePage({ params }: { params: Promise<{ orgSlug: string }> }) {
   const { orgSlug } = await params;
+  if (isPublicDemoOrganization(orgSlug)) redirect(`/app/${orgSlug}/services`);
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <PageHeader

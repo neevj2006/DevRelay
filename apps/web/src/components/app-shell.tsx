@@ -49,7 +49,8 @@ type AppShellProps = {
   organizations: ReadonlyArray<{ name: string; slug: string }>;
   children: React.ReactNode;
   role?: OrganizationRole;
-  user: { email: string; name: string };
+  readOnly?: boolean;
+  user?: { email: string; name: string } | undefined;
 };
 
 function OrganizationSwitcher({
@@ -260,10 +261,13 @@ export function AppShell({
   orgSlug,
   organizations,
   role = "owner",
+  readOnly = false,
   children,
   user,
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const organizationName =
+    organizations.find((organization) => organization.slug === orgSlug)?.name ?? orgSlug;
   return (
     <div className="min-h-screen bg-background">
       <a
@@ -321,7 +325,7 @@ export function AppShell({
           ) : (
             <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs text-text-secondary">
               <span className="size-2 rounded-full bg-[var(--status-operational-fg)]" />
-              Production
+              {readOnly ? "Read-only demo" : "Production"}
             </div>
           )}
         </div>
@@ -350,7 +354,7 @@ export function AppShell({
                 <SheetTitle>
                   <Brand />
                 </SheetTitle>
-                <SheetDescription>Navigate Acme Cloud operations.</SheetDescription>
+                <SheetDescription>Navigate {organizationName} operations.</SheetDescription>
               </SheetHeader>
               <div className="p-4">
                 <OrganizationSwitcher organizations={organizations} orgSlug={orgSlug} />
@@ -365,20 +369,38 @@ export function AppShell({
           </div>
           <span className="hidden items-center gap-2 rounded-full border px-2.5 py-1 text-xs text-text-secondary sm:flex">
             <span className="size-2 rounded-full bg-[var(--status-operational-fg)]" />
-            Production
+            {readOnly ? "Read-only demo" : "Production"}
           </span>
           <ThemeSelector />
-          <AccountMenu user={user} />
+          {readOnly || !user ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/sign-in">Sign in</Link>
+            </Button>
+          ) : (
+            <AccountMenu user={user} />
+          )}
         </header>
         <aside
-          aria-label="Free-tier usage"
-          className="border-b border-[var(--status-degraded-border)] bg-[var(--status-degraded-bg)] px-4 py-2 text-[13px] text-[var(--status-degraded-fg)] sm:px-6"
+          aria-label={readOnly ? "Read-only demo notice" : "Free-tier usage"}
+          className={cn(
+            "border-b px-4 py-2 text-[13px] sm:px-6",
+            readOnly
+              ? "border-border bg-muted text-text-secondary"
+              : "border-[var(--status-degraded-border)] bg-[var(--status-degraded-bg)] text-[var(--status-degraded-fg)]",
+          )}
         >
           <div className="mx-auto flex max-w-[1440px] items-center gap-2">
             <TriangleAlert aria-hidden="true" className="size-4" />
-            <span>
-              <strong>Free demo:</strong> 3 of 5 monitors in use.
-            </span>
+            {readOnly ? (
+              <span>
+                <strong>Read-only product demo:</strong> explore seeded, non-personal data. Changes
+                are disabled; sign in to create your own organization.
+              </span>
+            ) : (
+              <span>
+                <strong>Hosted free tier:</strong> up to 5 active monitors across the deployment.
+              </span>
+            )}
           </div>
         </aside>
         <main className="mx-auto w-full max-w-[1440px] p-4 sm:p-6" id="main-content" tabIndex={-1}>
