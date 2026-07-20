@@ -179,7 +179,7 @@ export function MaintenanceConsole({
                     <div>
                       <CardTitle>{item.title}</CardTitle>
                       <CardDescription>
-                        {new Date(item.startsAt).toISOString().replace("T", " ").slice(0, 16)} –{" "}
+                        {new Date(item.startsAt).toISOString().replace("T", " ").slice(0, 16)} -{" "}
                         {new Date(item.endsAt).toISOString().replace("T", " ").slice(0, 16)} UTC ·{" "}
                         {item.status}
                       </CardDescription>

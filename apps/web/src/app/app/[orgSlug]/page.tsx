@@ -189,7 +189,7 @@ export default async function OrganizationOverviewPage({
                   : "No monitor evidence yet"
               }
               label="Availability (30d)"
-              value={availability === null ? "—" : `${availability.toFixed(2)}%`}
+              value={availability === null ? "-" : `${availability.toFixed(2)}%`}
             />
             <KpiCard
               detail="Configured endpoint checks"
@@ -240,7 +240,7 @@ export default async function OrganizationOverviewPage({
                   className: "text-right",
                   cell: (service) => (
                     <span className="font-mono tabular-nums">
-                      {service.monitorCount ? `${service.availability.toFixed(2)}%` : "—"}
+                      {service.monitorCount ? `${service.availability.toFixed(2)}%` : "-"}
                     </span>
                   ),
                 },
@@ -279,7 +279,7 @@ export default async function OrganizationOverviewPage({
                   <>
                     <p className="font-medium">{upcomingMaintenance.title}</p>
                     <p className="mt-2 text-sm text-text-secondary">
-                      {new Date(upcomingMaintenance.startsAt).toLocaleString()} –{" "}
+                      {new Date(upcomingMaintenance.startsAt).toLocaleString()} -{" "}
                       {new Date(upcomingMaintenance.endsAt).toLocaleString()}
                     </p>
                     <p className="mt-2 text-sm text-text-secondary">

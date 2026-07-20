@@ -92,7 +92,7 @@ export function CommunicationsPage({
   const succeeded = data.deliveries.filter((item) => item.status === "succeeded").length;
   const deliveryRate = data.deliveries.length
     ? ((succeeded / data.deliveries.length) * 100).toFixed(2)
-    : "—";
+    : "-";
   return (
     <div className="space-y-8">
       <PageHeader
@@ -106,7 +106,7 @@ export function CommunicationsPage({
         />
         <Metric
           label="Recent delivery rate"
-          value={deliveryRate === "—" ? "—" : `${deliveryRate}%`}
+          value={deliveryRate === "-" ? "-" : `${deliveryRate}%`}
         />
         <Metric
           label="Retrying now"
@@ -241,7 +241,7 @@ export function CommunicationsPage({
                 cell: (row) =>
                   row.nextAttemptAt
                     ? new Date(row.nextAttemptAt).toLocaleString()
-                    : (row.lastError ?? "—"),
+                    : (row.lastError ?? "-"),
               },
               ...(readOnly
                 ? []
