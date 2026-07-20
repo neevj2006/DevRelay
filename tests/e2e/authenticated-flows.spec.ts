@@ -17,6 +17,10 @@ test("sign-in and organization onboarding remain keyboard-operable", async ({ pa
     page.getByRole("heading", { name: "Return to the calm control room." }),
   ).toBeVisible();
   await expect(page.getByText("Session expired")).toBeVisible();
+  await page.getByRole("link", { name: "Open seeded demo" }).click();
+  await expect(page).toHaveURL(/\/status\/acme$/);
+  await expect(page.getByRole("heading", { name: "major outage in progress" })).toBeVisible();
+  await page.goto("/sign-in?state=expired-session");
   await page
     .context()
     .addCookies([{ name: "devrelay.session_token", url: "http://127.0.0.1:3000", value: "mock" }]);
