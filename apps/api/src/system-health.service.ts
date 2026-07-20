@@ -79,7 +79,7 @@ export class SystemHealthService {
         } catch {
           queue = { adapter: "bullmq", status: "degraded" };
         } finally {
-          await client.close().catch(() => undefined);
+          await client.close().catch((): undefined => undefined);
         }
       }
     }
