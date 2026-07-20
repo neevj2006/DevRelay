@@ -100,9 +100,15 @@ const server = createServer((request, response) => {
       { redirect: false, token: "mock", user: { id: "user-1", name: "Local Developer" } },
       { "set-cookie": "devrelay.session_token=mock; Path=/; HttpOnly; SameSite=Lax" },
     );
+  if (
+    url.pathname === "/organizations" &&
+    request.method === "GET" &&
+    request.headers.cookie?.includes("mock-empty")
+  )
+    return json(response, 200, []);
   if (url.pathname === "/organizations" && request.method === "GET")
     return json(response, 200, [
-      { id: "org-1", name: "Acme Cloud", role: "owner", slug: "acme" },
+      { id: "org-1", name: "Northstar Cloud", role: "owner", slug: "northstar-cloud" },
       { id: "org-2", name: "Member Cloud", role: "member", slug: "member-cloud" },
       { id: "org-3", name: "Team Cloud", role: "owner", slug: "team-cloud" },
       { id: "org-4", name: "Empty Cloud", role: "owner", slug: "empty-cloud" },

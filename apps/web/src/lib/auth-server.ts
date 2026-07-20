@@ -46,11 +46,7 @@ export async function getServerSession(): Promise<AuthenticatedSession | null> {
 }
 
 export async function getServerOrganizations(): Promise<SessionOrganization[]> {
-  try {
-    const response = await apiRequest("/organizations");
-    if (!response.ok) return [];
-    return (await response.json()) as SessionOrganization[];
-  } catch {
-    return [];
-  }
+  const response = await apiRequest("/organizations");
+  if (!response.ok) throw new Error("Organizations could not be loaded");
+  return (await response.json()) as SessionOrganization[];
 }
