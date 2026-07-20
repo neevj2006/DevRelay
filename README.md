@@ -1,12 +1,8 @@
 # DevRelay
 
-[![CI](https://github.com/neevj2006/DevRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/neevj2006/DevRelay/actions/workflows/ci.yml)
-
 DevRelay is a multi-tenant monitoring and incident-response SaaS that turns scheduled HTTP checks into confirmed service state, exactly one incident, public status updates, and retry-safe subscriber notifications. It is built as a TypeScript modular monolith with PostgreSQL as the source of truth, interchangeable BullMQ and QStash queue adapters, a transactional outbox, tenant-scoped authorization, and explicit defenses for outbound-request and public/private data boundaries.
 
 [Open the live demo](https://devrelay-delta.vercel.app) · [View the public status page](https://devrelay-delta.vercel.app/status/acme) · [Read the architecture guide](docs/architecture.md)
-
-![DevRelay public status page showing seeded service and incident history](docs/assets/public-status-page.png)
 
 The hosted demo uses deterministic, non-personal data. Its public status page needs no account. Administrative product routes require authentication and are intentionally not exposed through shared demo credentials.
 
