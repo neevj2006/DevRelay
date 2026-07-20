@@ -61,6 +61,24 @@ describe("environment validation", () => {
     ).toThrow(ZodError);
   });
 
+  it("requires OAuth callbacks to use the browser application origin", () => {
+    expect(() =>
+      parseApiEnvironment({
+        ...sharedEnvironment,
+        APP_ORIGIN: "https://devrelay.example",
+        AUTH_BASE_URL: "https://devrelay-api.example",
+      }),
+    ).toThrow(/AUTH_BASE_URL must use APP_ORIGIN/);
+
+    expect(
+      parseApiEnvironment({
+        ...sharedEnvironment,
+        APP_ORIGIN: "https://devrelay.example",
+        AUTH_BASE_URL: "https://devrelay.example",
+      }).AUTH_BASE_URL,
+    ).toBe("https://devrelay.example");
+  });
+
   it("treats empty optional OAuth values as unconfigured", () => {
     expect(
       parseApiEnvironment({
