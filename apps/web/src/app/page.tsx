@@ -273,7 +273,7 @@ export default function Home() {
                 description:
                   "Authoritative timeline, explicit public/private composers, evidence, delivery, and transitions.",
                 icon: Activity,
-                href: "/app/acme/incidents/inc-api-errors",
+                href: "/app/acme/incidents",
               },
               {
                 title: "Public status",
