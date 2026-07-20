@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
+  if (/^\/app\/acme(?:\/|$)/i.test(request.nextUrl.pathname)) return NextResponse.next();
   const sessionCookie = getSessionCookie(request, { cookiePrefix: "devrelay" });
   if (!sessionCookie) {
     const signInUrl = new URL("/sign-in", request.url);

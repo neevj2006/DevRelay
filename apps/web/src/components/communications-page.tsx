@@ -42,10 +42,12 @@ export function CommunicationsPage({
   data,
   defaultTab = "subscribers",
   orgSlug,
+  readOnly = false,
 }: {
   data: CommunicationsData;
   defaultTab?: "subscribers" | "webhooks" | "deliveries";
   orgSlug: string;
+  readOnly?: boolean;
 }) {
   const [webhooks, setWebhooks] = useState(data.webhooks);
   const [secret, setSecret] = useState("");
@@ -158,34 +160,46 @@ export function CommunicationsPage({
           />
         </TabsContent>
         <TabsContent className="mt-6 space-y-5" value="webhooks">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add webhook destination</CardTitle>
-              <CardDescription>
-                Only public HTTP(S) destinations are accepted. Secrets are encrypted at rest.
-              </CardDescription>
-            </CardHeader>
-            <form action={addWebhook} className="grid gap-3 px-6 pb-6 sm:grid-cols-[1fr_2fr_auto]">
-              <Input aria-label="Webhook name" name="name" placeholder="Customer status" required />
-              <Input
-                aria-label="Webhook URL"
-                name="endpointUrl"
-                placeholder="https://hooks.example.com/status"
-                required
-                type="url"
-              />
-              <Button type="submit">
-                <Plus aria-hidden="true" />
-                Add webhook
-              </Button>
-            </form>
-            {secret ? (
-              <div className="border-t px-6 py-4">
-                <p className="text-xs font-medium">Signing secret (shown once)</p>
-                <code className="mt-1 block break-all rounded bg-muted p-2 text-xs">{secret}</code>
-              </div>
-            ) : null}
-          </Card>
+          {!readOnly ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Add webhook destination</CardTitle>
+                <CardDescription>
+                  Only public HTTP(S) destinations are accepted. Secrets are encrypted at rest.
+                </CardDescription>
+              </CardHeader>
+              <form
+                action={addWebhook}
+                className="grid gap-3 px-6 pb-6 sm:grid-cols-[1fr_2fr_auto]"
+              >
+                <Input
+                  aria-label="Webhook name"
+                  name="name"
+                  placeholder="Customer status"
+                  required
+                />
+                <Input
+                  aria-label="Webhook URL"
+                  name="endpointUrl"
+                  placeholder="https://hooks.example.com/status"
+                  required
+                  type="url"
+                />
+                <Button type="submit">
+                  <Plus aria-hidden="true" />
+                  Add webhook
+                </Button>
+              </form>
+              {secret ? (
+                <div className="border-t px-6 py-4">
+                  <p className="text-xs font-medium">Signing secret (shown once)</p>
+                  <code className="mt-1 block break-all rounded bg-muted p-2 text-xs">
+                    {secret}
+                  </code>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
           {webhooks.map((item) => (
             <Card key={item.id}>
               <CardHeader>
@@ -214,7 +228,7 @@ export function CommunicationsPage({
               {
                 id: "status",
                 header: "Status",
-                cell: (row) => (
+                cell: (row: CommunicationsData["deliveries"][number]) => (
                   <span className="inline-flex items-center gap-1.5">
                     <RefreshCw aria-hidden="true" className="size-3.5" />
                     {row.status.replaceAll("_", " ")}
@@ -229,15 +243,19 @@ export function CommunicationsPage({
                     ? new Date(row.nextAttemptAt).toLocaleString()
                     : (row.lastError ?? "—"),
               },
-              {
-                id: "action",
-                header: "Action",
-                cell: (row) => (
-                  <Button onClick={() => redeliver(row.id)} size="sm" variant="outline">
-                    Redeliver
-                  </Button>
-                ),
-              },
+              ...(readOnly
+                ? []
+                : [
+                    {
+                      id: "action",
+                      header: "Action",
+                      cell: (row: CommunicationsData["deliveries"][number]) => (
+                        <Button onClick={() => redeliver(row.id)} size="sm" variant="outline">
+                          Redeliver
+                        </Button>
+                      ),
+                    },
+                  ]),
             ]}
             getRowKey={(row) => row.id}
             rows={data.deliveries}

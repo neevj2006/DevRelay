@@ -6,7 +6,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormField } from "@/components/form-field";
-import { StatusBadge } from "@/components/operational-status";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,10 +16,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 
-const steps = ["Organization", "First service", "Ready"] as const;
+const steps = ["Organization", "Ready"] as const;
 
 export function slugifyOrganizationName(value: string) {
   return value
@@ -33,10 +30,8 @@ export function slugifyOrganizationName(value: string) {
 export function OnboardingFlow() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [organizationName, setOrganizationName] = useState("Acme Cloud");
-  const [slug, setSlug] = useState("acme");
-  const [serviceName, setServiceName] = useState("API Gateway");
-  const [isPublic, setIsPublic] = useState(true);
+  const [organizationName, setOrganizationName] = useState("");
+  const [slug, setSlug] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const previewUrl = `devrelay.dev/status/${slug || "your-team"}`;
 
@@ -53,18 +48,6 @@ export function OnboardingFlow() {
         toast.error(body?.message ?? "The organization could not be created.");
         return;
       }
-      const serviceResponse = await fetch(`/api/backend/organizations/${slug}/services`, {
-        body: JSON.stringify({ displayOrder: 0, isPublic, name: serviceName }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      if (!serviceResponse.ok) {
-        const body = (await serviceResponse.json().catch(() => null)) as {
-          message?: string;
-        } | null;
-        toast.error(body?.message ?? "The first service could not be created.");
-        return;
-      }
       router.push(`/app/${slug}`);
       router.refresh();
     } finally {
@@ -74,7 +57,7 @@ export function OnboardingFlow() {
 
   return (
     <div className="w-full max-w-2xl">
-      <ol aria-label="Onboarding progress" className="mb-8 grid grid-cols-3 gap-2">
+      <ol aria-label="Onboarding progress" className="mb-8 grid grid-cols-2 gap-2">
         {steps.map((label, index) => (
           <li
             aria-current={index === step ? "step" : undefined}
@@ -136,52 +119,13 @@ export function OnboardingFlow() {
         {step === 1 ? (
           <>
             <CardHeader>
-              <CardTitle>Add the first service</CardTitle>
-              <CardDescription>
-                A service is the customer-visible system whose health DevRelay communicates.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <FormField
-                description="You can add HTTP monitoring after onboarding."
-                id="service-name"
-                label="Service name"
-                required
-              >
-                <Input
-                  onChange={(event) => setServiceName(event.target.value)}
-                  value={serviceName}
-                />
-              </FormField>
-              <div className="flex items-start justify-between gap-4 rounded-lg border bg-surface-subtle p-4">
-                <div>
-                  <Label htmlFor="public-service">Show on public status page</Label>
-                  <p className="mt-1 text-[13px] leading-5 text-text-secondary">
-                    Customers can see service state and related public incidents.
-                  </p>
-                </div>
-                <Switch checked={isPublic} id="public-service" onCheckedChange={setIsPublic} />
-              </div>
-              <div className="rounded-lg border bg-card p-4">
-                <p className="text-xs font-semibold text-muted-foreground">STATUS PAGE PREVIEW</p>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="font-medium">{serviceName || "Untitled service"}</span>
-                  <StatusBadge status="operational" />
-                </div>
-              </div>
-            </CardContent>
-          </>
-        ) : null}
-        {step === 2 ? (
-          <>
-            <CardHeader>
               <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-[var(--status-operational-bg)] text-[var(--status-operational-fg)]">
                 <Check aria-hidden="true" className="size-6" />
               </div>
               <CardTitle>{organizationName || "Your organization"} is ready</CardTitle>
               <CardDescription>
-                The seeded workspace starts healthy so you can explore monitoring, incidents, and
-                communication safely.
+                Your workspace will start empty. Add only the services and endpoints that belong to
+                your organization.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -191,21 +135,14 @@ export function OnboardingFlow() {
                   <dd className="mt-1 font-medium">{organizationName}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">First service</dt>
-                  <dd className="mt-1 font-medium">{serviceName}</dd>
-                </div>
-                <div>
                   <dt className="text-xs text-muted-foreground">Public URL</dt>
                   <dd className="mt-1 break-all font-mono text-xs">{previewUrl}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Visibility</dt>
-                  <dd className="mt-1 font-medium">{isPublic ? "Public" : "Private"}</dd>
                 </div>
               </dl>
               <p className="mt-5 flex gap-2 text-sm text-text-secondary">
                 <RadioTower aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-                Next, create a monitor to begin collecting real availability evidence.
+                Next, create your first service and add an endpoint monitor to begin collecting real
+                availability evidence.
               </p>
             </CardContent>
           </>
@@ -221,9 +158,7 @@ export function OnboardingFlow() {
           </Button>
           {step < steps.length - 1 ? (
             <Button
-              disabled={
-                (step === 0 && (!organizationName || !slug)) || (step === 1 && !serviceName)
-              }
+              disabled={step === 0 && (!organizationName || !slug)}
               onClick={() => setStep((current) => Math.min(steps.length - 1, current + 1))}
             >
               Continue <ArrowRight aria-hidden="true" />

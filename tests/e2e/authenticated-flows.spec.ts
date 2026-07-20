@@ -11,6 +11,10 @@ test.beforeEach(async ({ context }) => {
 });
 
 test("sign-in and organization onboarding remain keyboard-operable", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
   await page.context().clearCookies();
   await page.goto("/sign-in?state=expired-session");
   await expect(
@@ -18,24 +22,39 @@ test("sign-in and organization onboarding remain keyboard-operable", async ({ pa
   ).toBeVisible();
   await expect(page.getByText("Session expired")).toBeVisible();
   await page.getByRole("link", { name: "Open seeded demo" }).click();
-  await expect(page).toHaveURL(/\/status\/acme$/);
-  await expect(page.getByRole("heading", { name: "major outage in progress" })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/acme$/);
+  await expect(page.getByText("Read-only product demo:")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Service health" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create service" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Create incident" })).toHaveCount(0);
   await page.goto("/sign-in?state=expired-session");
   await page
     .context()
     .addCookies([{ name: "devrelay.session_token", url: "http://127.0.0.1:3000", value: "mock" }]);
   await page.goto("/onboarding");
   await expect(page.getByText("Create your organization", { exact: true })).toBeVisible();
+  await page.getByLabel("Organization name").fill("Northstar Labs");
+  await expect(page.getByLabel("Organization slug")).toHaveValue("northstar-labs");
   await page.getByRole("button", { name: "Continue" }).focus();
   await expect(page.getByRole("button", { name: "Continue" })).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Add the first service", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText("Acme Cloud is ready", { exact: true })).toBeVisible();
+  await expect(page.getByText("Northstar Labs is ready", { exact: true })).toBeVisible();
+  await expect(page.getByText(/workspace will start empty/i)).toBeVisible();
+  expect(consoleErrors).toEqual([]);
+});
+
+test("a newly created organization starts with an empty real-data dashboard", async ({ page }) => {
+  await page.goto("/app/empty-cloud");
+
+  await expect(
+    page.getByRole("heading", { name: "Start monitoring your first service" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create first service" })).toBeVisible();
+  await expect(page.getByText("API Gateway")).toHaveCount(0);
 });
 
 test("monitor wizard saves, tests, and activates a safe monitor", async ({ page }) => {
-  await page.goto(`/app/acme/services/${serviceId}/monitors/new`);
+  await page.goto(`/app/team-cloud/services/${serviceId}/monitors/new`);
   await expect(page.getByText("Monitor basics", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Request behavior", { exact: true })).toBeVisible();
@@ -53,7 +72,7 @@ test("monitor wizard saves, tests, and activates a safe monitor", async ({ page 
 });
 
 test("incident console keeps public and private communication distinct", async ({ page }) => {
-  await page.goto(`/app/acme/incidents/${incidentId}`);
+  await page.goto(`/app/team-cloud/incidents/${incidentId}`);
   await expect(page.getByRole("heading", { name: "API errors elevated" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Public update" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Internal only" })).toBeVisible();
