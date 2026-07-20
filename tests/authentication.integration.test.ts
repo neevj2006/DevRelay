@@ -16,8 +16,8 @@ let auth: ReturnType<typeof createDevRelayAuth>;
 
 const databaseUrl =
   process.env.TEST_DATABASE_URL ?? "postgresql://devrelay:devrelay_local@localhost:5432/devrelay";
-const authOrigin = "http://localhost:4000";
 const appOrigin = "http://localhost:3000";
+const authOrigin = appOrigin;
 
 beforeAll(async () => {
   isolatedDatabase = await createIsolatedTestDatabase({ adminConnectionString: databaseUrl });
