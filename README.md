@@ -2,117 +2,134 @@
 
 [![CI](https://github.com/neevj2006/DevRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/neevj2006/DevRelay/actions/workflows/ci.yml)
 
-DevRelay is a multi-tenant incident response, service monitoring, and public status platform for small engineering teams. It is designed to monitor HTTP services, confirm outages under configurable policies, coordinate incident updates, notify subscribers safely, and preserve a reliable operational history.
+DevRelay is a multi-tenant monitoring and incident-response SaaS that turns scheduled HTTP checks into confirmed service state, exactly one incident, public status updates, and retry-safe subscriber notifications. It is built as a TypeScript modular monolith with PostgreSQL as the source of truth, interchangeable BullMQ and QStash queue adapters, a transactional outbox, tenant-scoped authorization, and explicit defenses for outbound-request and public/private data boundaries.
 
-## Project goals
+[Open the live demo](https://devrelay-delta.vercel.app) · [View the public status page](https://devrelay-delta.vercel.app/status/acme) · [Read the architecture guide](docs/architecture.md)
 
-- Monitor HTTP services on a schedule.
-- Reduce false positives with configurable failure and recovery thresholds.
-- Create one incident even when jobs are duplicated or retried.
-- Give responders a clear incident timeline with separate public updates and private notes.
-- Publish accessible, real-time public status pages.
-- Deliver retry-safe email and signed webhook notifications.
-- Maintain tenant isolation, audit history, availability analytics, and postmortems.
-- Demonstrate reliability through automated tests and fault injection.
+![DevRelay public status page showing seeded service and incident history](docs/assets/public-status-page.png)
 
-## Repository structure
+The hosted demo uses deterministic, non-personal data. Its public status page needs no account. Administrative product routes require authentication and are intentionally not exposed through shared demo credentials.
+
+## Core workflow
+
+```mermaid
+flowchart LR
+  A["Schedule due HTTP check"] --> B["Validate and pin public destination"]
+  B --> C["Persist one check result per monitor window"]
+  C --> D{"Policy threshold reached?"}
+  D -- "No" --> E["Keep current evidence-backed state"]
+  D -- "Failure" --> F["Create or link one active incident"]
+  D -- "Recovery" --> G["Resolve state after recovery confirmation"]
+  F --> H["Write public update and outbox event atomically"]
+  H --> I["Fan out idempotent email/webhook deliveries"]
+  I --> J["Publish status through SSE with polling fallback"]
+```
+
+Duplicate jobs, retries, and concurrent workers converge through database uniqueness constraints and transactional claims. If checks stop arriving, DevRelay reports `Unknown`; it never invents a healthy state from stale evidence.
+
+## Architecture
+
+```mermaid
+flowchart TB
+  Browser["Next.js web application"] --> API["NestJS API"]
+  Public["Public status clients"] --> API
+  API --> DB[("PostgreSQL source of truth")]
+  API --> Queue{"JobQueue adapter"}
+  Queue --> Bull["BullMQ + Redis\nlocal persistent workers"]
+  Queue --> QStash["QStash\nhosted signed callbacks"]
+  Bull --> Worker["Execution services"]
+  QStash --> API
+  Worker --> DB
+  API --> Providers["Resend and signed webhooks"]
+  API --> SSE["SSE with polling fallback"]
+```
+
+The repository is a pnpm/Turborepo workspace:
 
 ```text
 apps/
-  api/          NestJS API and hosted job receivers
+  api/          NestJS API, public endpoints, and hosted job receivers
   web/          Next.js App Router application
-  worker/       Persistent local background workers
+  worker/       Persistent BullMQ workers for local/full-reliability mode
 packages/
   config/       Validated environment contracts
-  contracts/    Shared HTTP and job contracts
-  database/     Database schema and access layer
-  execution/    Scheduler, monitor execution, heartbeat, and outbox services
-  monitoring/   Check execution and policy domain
-  queue/        Shared queue interface and adapters
-  ui/           Shared source-owned components
+  contracts/    Shared HTTP, queue, and webhook contracts
+  database/     Drizzle schema, migrations, and transaction helpers
+  execution/    Scheduler, checks, policy, incidents, outbox, and delivery
+  monitoring/   Outbound HTTP safety and monitoring domain
+  queue/        JobQueue contract with BullMQ and QStash adapters
+  ui/           Shared source-owned UI primitives
 ```
 
-Turborepo orchestrates builds, linting, type checks, tests, and development processes across the pnpm workspace.
+See [docs/architecture.md](docs/architecture.md) for the entity diagram, incident state machine, idempotency keys, outbox lifecycle, deployment modes, and operational trade-offs.
 
-## Requirements
+## Technology stack
+
+| Layer        | Technology                                                        |
+| ------------ | ----------------------------------------------------------------- |
+| Web          | Next.js 16, React 19, Tailwind CSS 4, Radix UI                    |
+| API          | NestJS 11, Zod contracts, Better Auth                             |
+| Data         | PostgreSQL 17, Drizzle ORM                                        |
+| Local queue  | BullMQ 5 and Redis 7                                              |
+| Hosted queue | Upstash QStash signed callbacks                                   |
+| Delivery     | SMTP/Mailpit locally, Resend and signed webhooks when hosted      |
+| Quality      | TypeScript strict mode, ESLint, Prettier, Vitest, Playwright, axe |
+| Tooling      | pnpm 11 and Turborepo 2                                           |
+
+## Local setup
+
+Requirements:
 
 - Node.js 22.13 or newer
 - pnpm 11.13.1
 - Docker Desktop with Linux containers
 
-Install pnpm if it is not already available:
+From the repository root in PowerShell:
 
 ```powershell
 npm install --global pnpm@11.13.1
-```
-
-## Windows and PowerShell setup
-
-From the repository root:
-
-```powershell
-pnpm install
+pnpm install --frozen-lockfile
 Copy-Item .env.example .env
 pnpm infra:up
+$env:DATABASE_URL = "postgresql://devrelay:devrelay_local@localhost:5432/devrelay"
+pnpm db:migrate
 pnpm dev
 ```
 
-The default local endpoints are:
-
-- Web: [http://localhost:3000](http://localhost:3000)
-- API health: [http://localhost:4000/health](http://localhost:4000/health)
-- Mailpit: [http://localhost:8025](http://localhost:8025)
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-
-The web, API, and worker development processes run together through `pnpm dev`. This command builds the shared packages first and then starts all three applications without requiring Turborepo's native executable, which can be blocked by Windows Application Control. Stop the processes with `Ctrl+C`.
-
-## Local infrastructure
+Open the web app at [http://localhost:3000](http://localhost:3000), the API health endpoint at [http://localhost:4000/health](http://localhost:4000/health), and Mailpit at [http://localhost:8025](http://localhost:8025). Stop application processes with `Ctrl+C`, then preserve or reset local infrastructure with:
 
 ```powershell
-pnpm infra:up       # Start PostgreSQL, Redis, and Mailpit and wait for health
-pnpm infra:status   # Inspect container status
-pnpm infra:logs     # Follow service logs
-pnpm infra:down     # Stop containers and preserve data
-pnpm infra:reset    # Stop containers and delete local development volumes
+pnpm infra:down
+pnpm infra:reset # permanently deletes only this Compose project's local volumes
 ```
 
-`infra:reset` permanently deletes only the Docker volumes created by this Compose project.
+## Environment variables
 
-## Monitoring execution modes
+Copy `.env.example` and keep real secrets outside Git. The example groups every supported setting; the important production groups are:
 
-Local development uses BullMQ and Redis. The worker derives deterministic check windows, persists
-the expected window before enqueueing it, safely retries transient failures, and deduplicates the
-result by organization, monitor, and scheduled timestamp. Queue failures remain available for
-inspection, and pending database windows are republished after a scheduler interruption.
+| Group          | Variables                                                                                | Purpose                                                                               |
+| -------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Database       | `DATABASE_URL`                                                                           | Pooled application connection; use a direct connection only for controlled migrations |
+| Authentication | `APP_ORIGIN`, `AUTH_BASE_URL`, `AUTH_SECRET`, optional GitHub OAuth values               | Allowed browser origin, callbacks, sessions, and OAuth                                |
+| Queue          | `QUEUE_ADAPTER`, `REDIS_URL`, `QSTASH_*`                                                 | Select BullMQ locally or signed QStash callbacks when hosted                          |
+| Monitoring     | `QSTASH_DISPATCH_BATCH_SIZE`, `QSTASH_DAILY_MESSAGE_LIMIT`, heartbeat settings           | Bound scheduling and expose stale-worker evidence                                     |
+| Delivery       | SMTP/Mailpit values, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`                           | Local capture or controlled hosted email                                              |
+| Encryption     | `NOTIFICATION_ENCRYPTION_KEY`                                                            | Encrypt webhook secrets and sensitive callback material at rest                       |
+| Retention      | `CHECK_RESULT_RETENTION_DAYS`, `DELIVERY_ATTEMPT_RETENTION_DAYS`, `TOKEN_RETENTION_DAYS` | Configure bounded, idempotent cleanup                                                 |
 
-Hosted deployments can set `QUEUE_ADAPTER=qstash` and configure the QStash token, current and next
-signing keys, and the public API base URL documented in `.env.example`. All hosted callbacks verify
-the QStash signature against the unparsed request body. Create or reconcile the single five-minute
-dispatcher schedule with:
-
-```powershell
-pnpm --filter @devrelay/api qstash:schedule
-```
-
-Keep `QSTASH_HOSTED_SCHEDULER_PAUSED=true` until the public endpoint and credentials are ready. The
-hosted dispatcher enforces both a bounded batch size and a daily message ceiling.
-
-## Subscriber notifications
-
-Local email is delivered to Mailpit over SMTP. Hosted deployments can set `RESEND_API_KEY`; provider idempotency keys are derived from the durable logical delivery record. Configure `NOTIFICATION_ENCRYPTION_KEY` before creating outgoing webhooks. Webhook receivers should follow the [signature verification guide](docs/outgoing-webhooks.md).
+Production requires unique authentication and notification encryption secrets. Do not reuse the development examples. QStash must stay paused until migrations, callbacks, origins, and provider credentials have been verified.
 
 ## Validation
 
-With local infrastructure running, execute every required check with one command:
+Start local infrastructure, install Chromium once, and run the complete release gate:
 
 ```powershell
+pnpm infra:up
+pnpm exec playwright install chromium
 pnpm check
 ```
 
-This verifies formatting, linting, import ordering, package boundaries, strict TypeScript, unit tests, PostgreSQL/Redis integration, rendered Chromium journeys, accessibility, responsive status pages, and production builds. Install the browser once with `pnpm exec playwright install chromium` when running outside CI.
-
-Individual commands are also available:
+`pnpm check` runs formatting, linting, package boundaries, strict type checks, unit tests, PostgreSQL/Redis integration tests, rendered desktop/mobile browser journeys, accessibility checks, and production builds. Individual commands are also available:
 
 ```powershell
 pnpm format:check
@@ -125,12 +142,37 @@ pnpm test:e2e
 pnpm build
 ```
 
-## Reliability proof
+## Measured reliability
 
-The Phase 14 proof covers 176 automated checks: 94 unit tests, 74 PostgreSQL/Redis integration tests, and 8 rendered browser scenarios across desktop and mobile Chromium. It exercises duplicate deliveries, concurrent incident creation, out-of-order results, interrupted database work, restarted queue clients, delivery retries and permanent failure, stopped monitoring, retention, role boundaries, keyboard operation, responsive layout, and axe accessibility scans.
+The release proof contains 178 automated checks: 96 unit tests, 74 PostgreSQL/Redis integration tests, and 8 rendered Chromium scenarios. The fault suite covers duplicate and out-of-order messages, simultaneous incident creation, killed database work, queue-client restarts, notification retries, scheduler stoppage, role boundaries, responsive behavior, keyboard paths, and axe accessibility rules.
 
-A representative local run on July 18, 2026 seeded 6,000 check windows/results and 2,000 audit events. `EXPLAIN ANALYZE` selected `check_results_recent_monitor_idx` and `audit_events_organization_timeline_idx`; retention removed the 90-day-expired slice within the five-second non-blocking gate. The focused fault-and-load suite completed in 1.15 seconds against local Docker PostgreSQL and Redis. See the [reliability evidence and fault matrix](docs/reliability.md) for the reproducible scenarios and pass criteria.
+A representative local run seeded 6,000 check windows/results and 2,000 audit events. PostgreSQL selected the dedicated recent-monitor and tenant audit-timeline indexes, and the focused fault/load suite completed in 1.15 seconds while retention stayed below its five-second non-blocking gate. Detection and recovery are policy-bound rather than claimed as network benchmarks: with the hosted minimum five-minute interval, the default three-failure/two-success policy confirms an outage after three consecutive results and recovery after two consecutive successes. Hosted end-to-end notification latency is not yet published as a performance claim.
+
+Full methodology and local-versus-hosted labels are in [docs/reliability.md](docs/reliability.md).
+
+## Deployment and free-tier limits
+
+Production uses two Vercel Hobby projects, a Neon Free PostgreSQL project, one QStash dispatcher schedule, and controlled Resend Free delivery. The hosted safeguards enforce:
+
+- five active HTTP monitors across the demo;
+- a minimum 300-second hosted interval;
+- batches of at most five and an application cap of 250 QStash messages per UTC day;
+- 30-day check-result and delivery-attempt retention;
+- seven-day expired-token retention; and
+- no payment method, paid plan, or automatic overage.
+
+Quota or provider failure leaves durable work pending or failed for inspection; it does not convert failure into success. Current provider ceilings and the ₹0 operating procedure are documented in [docs/free-tier-budget.md](docs/free-tier-budget.md).
+
+## Security boundaries
+
+DevRelay treats tenant identity, outbound monitoring, provider callbacks, queue duplication, secrets, and public incident projection as explicit trust boundaries. Every tenant-owned query is organization-scoped; monitor and webhook destinations are restricted to public HTTP(S) addresses and pinned after DNS validation; callback signatures and replay identities are verified; public projections use allowlisted fields; and raw response bodies, secrets, and private incident notes are excluded from public output.
+
+Application-layer SSRF controls are not a substitute for a deny-by-default egress firewall, and the free hosted tier does not provide that network boundary. The existing repository security review and its regression coverage are summarized in [docs/security.md](docs/security.md). Outgoing webhook consumers should follow [docs/outgoing-webhooks.md](docs/outgoing-webhooks.md).
+
+## Roadmap
+
+The portfolio MVP intentionally defers TCP/DNS/TLS/domain/browser monitors, multi-region quorum checks, on-call rotations, Slack/Teams/SMS delivery, billing, custom domains, long-term archives, and advanced SLO burn-rate analytics. The next reliability priorities are network-level egress isolation, a supported tenant export/deletion workflow, and hosted performance sampling after enough real traffic exists to report meaningful numbers.
 
 ## License
 
-No license has been selected yet. All rights are reserved until a license is added.
+No license has been selected. All rights are reserved.

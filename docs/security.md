@@ -4,6 +4,30 @@ DevRelay treats tenant boundaries, outbound monitoring, provider callbacks, and 
 projections as security boundaries. This document records the controls implemented by the
 portfolio MVP and the limits that remain deployment responsibilities.
 
+## Review basis and trust boundaries
+
+The portfolio release relies on the repository-wide Phase 12 threat model, security review, and
+regression suite completed before deployment. Phase 16 did not replace that review with a new scan;
+it verified that the published documentation matches the implemented controls and reran the normal
+release gates.
+
+| Boundary                             | Principal risk                                      | Implemented control                                                                                           |
+| ------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Public internet → API/status routes  | abuse, enumeration, data disclosure                 | rate budgets, bounded inputs, opaque/sluggified public identities, allowlisted projections                    |
+| Browser session → tenant resources   | cross-origin mutation, broken access control        | secure sessions, origin checks, server-resolved membership, centralized roles, tenant predicates              |
+| Tenant → shared PostgreSQL           | cross-tenant reads/writes                           | organization ownership on tenant tables, composite relations, service-level scope, negative integration tests |
+| Scheduler/queue → workers            | duplicates, replay, reordering, job forgery         | versioned schemas, deterministic identities, signed hosted callbacks, atomic claims, idempotent consumers     |
+| Worker → monitored target            | SSRF, DNS rebinding, unbounded response             | public-address allowlist, redirect revalidation, connection pinning, method/port/time/size limits             |
+| Private incident → public status     | private notes or identifiers leaking                | separate storage and commands, allowlisted public serialization, public-service eligibility checks            |
+| Application → email/webhook provider | secret disclosure, replay, false delivery state     | encryption at rest, timestamped HMAC, callback verification, durable attempts, one-time replay claims         |
+| Operator/deployment → runtime        | committed credentials, unsafe rotation, quota spend | environment-only secrets, encrypted provider stores, rotation procedure, hard free-tier caps                  |
+
+Security invariants include: an authenticated user cannot act outside an authorized organization;
+public routes cannot return private incident or subscriber data; untrusted outbound input cannot
+reach private/non-routable addresses through redirects or rebinding; unsigned or replayed callbacks
+cannot repeat a business effect; and queue duplication cannot create a second logical result,
+incident, or notification.
+
 ## Outbound network policy
 
 Monitor and webhook destinations accept only HTTP or HTTPS on ports 80 and 443. URLs containing
@@ -73,4 +97,19 @@ runbook and identity verification; direct ad-hoc database deletion is not a supp
 Security regression coverage includes IPv4 and IPv6 ranges, alternate IP forms, mixed DNS answers,
 redirect revalidation, connection-address pinning, cross-origin mutations, trusted client identity,
 public/private incident projection, callback replay, token URL handling, cross-tenant authorization,
-and retention cleanup. Dependency audit and secret scanning are part of the CI/release checklist.
+and retention cleanup. The Phase 12 review found and hardened the high-risk application boundaries
+before the hosted release; its tests remain part of the 178-check release baseline. Dependency audit
+and secret scanning are separate release checks and do not replace that threat-model review.
+
+## Known limitations
+
+- The free hosted tier has no dedicated deny-by-default egress firewall; application SSRF controls
+  reduce risk but do not create network isolation.
+- Provider backup capabilities are used, but an independent restore-time/recovery-point exercise is
+  not claimed for the portfolio demo.
+- Self-service tenant export and audited purge are not implemented; verified operator handling is
+  required for deletion requests.
+- Controlled hosted email testing is not sufficient for a representative deliverability or latency
+  benchmark.
+- Secrets must be rotated through provider and deployment stores; they must never be placed in logs,
+  screenshots, tickets, public incident updates, or repository files.
