@@ -4,7 +4,7 @@ DevRelay treats external delivery as repeatable and every public state as eviden
 
 ## Test environment
 
-The portfolio baseline was recorded on July 18–20, 2026 from commit `9e3b27d` and its Phase 14 parent evidence.
+The MVP baseline was recorded on July 18–20, 2026 from commit `9e3b27d` and its Phase 14 parent evidence.
 
 | Layer               | Recorded environment                                                                |
 | ------------------- | ----------------------------------------------------------------------------------- |

@@ -94,7 +94,7 @@ export default function Home() {
                 Reliability operations for focused teams
               </p>
               <h1 className="text-balance text-5xl font-bold leading-[1.08] tracking-[-0.045em] sm:text-6xl">
-                From failed check to trusted customer update—without losing the thread.
+                From failed check to trusted customer update - without losing the thread.
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-text-secondary">
                 DevRelay connects monitoring, incident coordination, and public communication in one

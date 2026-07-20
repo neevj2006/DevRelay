@@ -2,11 +2,11 @@
 
 DevRelay treats tenant boundaries, outbound monitoring, provider callbacks, and public status
 projections as security boundaries. This document records the controls implemented by the
-portfolio MVP and the limits that remain deployment responsibilities.
+MVP and the limits that remain deployment responsibilities.
 
 ## Review basis and trust boundaries
 
-The portfolio release relies on the repository-wide Phase 12 threat model, security review, and
+The MVP release relies on the repository-wide Phase 12 threat model, security review, and
 regression suite completed before deployment. Phase 16 did not replace that review with a new scan;
 it verified that the published documentation matches the implemented controls and reran the normal
 release gates.
@@ -106,7 +106,7 @@ and secret scanning are separate release checks and do not replace that threat-m
 - The free hosted tier has no dedicated deny-by-default egress firewall; application SSRF controls
   reduce risk but do not create network isolation.
 - Provider backup capabilities are used, but an independent restore-time/recovery-point exercise is
-  not claimed for the portfolio demo.
+  not claimed for the MVP demo.
 - Self-service tenant export and audited purge are not implemented; verified operator handling is
   required for deletion requests.
 - Controlled hosted email testing is not sufficient for a representative deliverability or latency
