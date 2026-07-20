@@ -1,6 +1,6 @@
 # DevRelay engineering architecture
 
-This document describes the portfolio release as implemented. DevRelay is a TypeScript modular monolith: the web, API, and persistent worker are separate deployable processes, but they share versioned contracts, one relational model, and one repository. PostgreSQL is authoritative; queues accelerate work but do not own business state.
+This document describes the MVP release as implemented. DevRelay is a TypeScript modular monolith: the web, API, and persistent worker are separate deployable processes, but they share versioned contracts, one relational model, and one repository. PostgreSQL is authoritative; queues accelerate work but do not own business state.
 
 ## System context
 
@@ -203,4 +203,4 @@ See [free-tier-budget.md](free-tier-budget.md) for current provider ceilings and
 
 ## Deferred architecture
 
-Multi-region workers, quorum outage decisions, dependency graphs, on-call/escalation, commercial billing, browser synthetics, custom domains, archival tiers, and advanced SLO analytics are intentionally outside the portfolio MVP.
+Multi-region workers, quorum outage decisions, dependency graphs, on-call/escalation, commercial billing, browser synthetics, custom domains, archival tiers, and advanced SLO analytics are intentionally outside the MVP.

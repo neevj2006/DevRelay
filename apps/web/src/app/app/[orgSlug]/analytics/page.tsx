@@ -96,14 +96,14 @@ export default async function AnalyticsPage({
             id: "latency",
             header: "Latency p50 / p95",
             cell: (r) =>
-              `${r.latencyP50Milliseconds ?? "—"} / ${r.latencyP95Milliseconds ?? "—"} ms`,
+              `${r.latencyP50Milliseconds ?? "-"} / ${r.latencyP95Milliseconds ?? "-"} ms`,
           },
           {
             id: "budget",
             header: "99.90% budget",
             cell: (r) =>
               r.errorBudgetChecksRemaining === null
-                ? "—"
+                ? "-"
                 : `${r.errorBudgetChecksRemaining} checks`,
           },
         ]}

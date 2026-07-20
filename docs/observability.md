@@ -9,7 +9,7 @@ DevRelay emits one-line structured JSON logs, bounded process metrics, and local
 - `warn`: retryable failures, stale evidence, paused scheduling, and growing backlog.
 - `error`: exhausted delivery attempts, worker failures, and API server errors.
 
-Hosted logs use the deployment provider's free retention window. Local logs are written to stdout and retained only when the operator redirects or collects them. No application-managed log archive is created, and logs must not be retained beyond 14 days for the portfolio demo.
+Hosted logs use the deployment provider's free retention window. Local logs are written to stdout and retained only when the operator redirects or collects them. No application-managed log archive is created, and logs must not be retained beyond 14 days for the MVP demo.
 
 ## Metrics
 
