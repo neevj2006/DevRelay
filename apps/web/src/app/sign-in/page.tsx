@@ -93,13 +93,13 @@ export default async function SignInPage({
               <Separator className="flex-1" />
             </div>
             <Button asChild className="w-full" size="lg" variant="outline">
-              <Link href="/app/acme">
+              <Link href="/status/acme">
                 Open seeded demo <ArrowRight aria-hidden="true" />
               </Link>
             </Button>
             <p className="text-center text-xs leading-5 text-muted-foreground">
-              By continuing, you acknowledge this is a portfolio demo with free-tier limits. Never
-              enter production secrets.
+              By continuing, you acknowledge this is an MVP demo with free-tier limits. Never enter
+              production secrets.
             </p>
           </CardContent>
           <CardFooter className="justify-center border-t pt-5 text-xs text-muted-foreground">

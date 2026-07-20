@@ -31,7 +31,7 @@ export const apiEnvironmentSchema = z
     API_BODY_LIMIT_BYTES: z.coerce.number().int().min(16_384).max(10_485_760).default(1_048_576),
     APP_ORIGIN: z.url().default("http://localhost:3000"),
     AUTH_BODY_LIMIT_BYTES: z.coerce.number().int().min(16_384).max(1_048_576).default(262_144),
-    AUTH_BASE_URL: z.url().default("http://localhost:4000"),
+    AUTH_BASE_URL: z.url().default("http://localhost:3000"),
     AUTH_SECRET: z.string().min(32).optional(),
     DATABASE_URL: databaseUrlSchema,
     GITHUB_CLIENT_ID: optionalNonEmptyString,
@@ -59,6 +59,14 @@ export const apiEnvironmentSchema = z
     TRUSTED_PROXY_CIDRS: optionalNonEmptyString,
   })
   .superRefine((environment, context) => {
+    if (new URL(environment.AUTH_BASE_URL).origin !== new URL(environment.APP_ORIGIN).origin) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "AUTH_BASE_URL must use APP_ORIGIN so OAuth callbacks receive the auth state cookie",
+        path: ["AUTH_BASE_URL"],
+      });
+    }
     if (environment.NODE_ENV === "production" && environment.AUTH_SECRET === undefined) {
       context.addIssue({
         code: "custom",

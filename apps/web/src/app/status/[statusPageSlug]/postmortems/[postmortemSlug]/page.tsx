@@ -58,7 +58,7 @@ export default async function PublicPostmortemPage({
             {p.actionItems.map((item, index) => (
               <li key={index}>
                 {item.description}
-                {item.owner ? ` — ${item.owner}` : ""}
+                {item.owner ? ` - ${item.owner}` : ""}
               </li>
             ))}
           </ul>
