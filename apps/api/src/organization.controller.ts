@@ -8,7 +8,18 @@ import {
   updateOrganizationMemberRoleInputSchema,
   uuidSchema,
 } from "@devrelay/contracts";
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 
 import { AuthService } from "./auth.service.js";
 import { OrganizationService } from "./organization.service.js";
@@ -55,10 +66,14 @@ export class OrganizationController {
     @Param("organizationSlug") organizationSlug: string,
     @Body() body: unknown,
   ) {
+    const input = parseRequestBody(createOrganizationInvitationInputSchema, body);
+    if (input.email === undefined) {
+      throw new BadRequestException("Invitation email is required");
+    }
     const invitation = await this.organizations.invite(
       request.auth.user.id,
       parseRequestBody(slugSchema, organizationSlug),
-      parseRequestBody(createOrganizationInvitationInputSchema, body),
+      { email: input.email, role: input.role },
     );
     if (this.authService.environment.NODE_ENV !== "production") return invitation;
     return {
