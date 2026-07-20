@@ -1,6 +1,22 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+test("incident command console card links to the incidents list", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+
+  await page.goto("/");
+  const card = page.locator('[data-slot="card"]').filter({ hasText: "Incident command console" });
+
+  await card.getByRole("link", { name: "Explore surface" }).click();
+
+  await expect(page).toHaveURL(/\/app\/acme\/incidents\/?$/);
+  await expect(page.getByRole("heading", { name: "Incidents" })).toBeVisible();
+  expect(consoleErrors).toEqual([]);
+});
+
 test("public outage, incident update, and subscription surfaces remain accessible", async ({
   page,
 }) => {
