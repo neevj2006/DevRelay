@@ -171,4 +171,4 @@ The MVP intentionally defers TCP/DNS/TLS/domain/browser monitors, multi-region q
 
 ## License
 
-No license has been selected. All rights are reserved.
+DevRelay is licensed under the MIT License. See [LICENSE](LICENSE) for the full license text.
