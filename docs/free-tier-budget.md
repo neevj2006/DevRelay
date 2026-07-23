@@ -15,7 +15,7 @@ Provider limits were verified on July 20, 2026. They can change, so check the li
 
 ## Application safeguards
 
-- At most five active hosted HTTP monitors exist across the demo deployment.
+- At most five active hosted monitors exist across the demo deployment, regardless of whether they are HTTP, TLS, or DNS.
 - Hosted monitor intervals cannot be shorter than 300 seconds.
 - One QStash schedule batches due work; individual monitor schedules are not created.
 - The scheduler publishes no more than 250 messages per UTC day and no more than five due checks per dispatch batch.

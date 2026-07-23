@@ -14,6 +14,7 @@ import {
   organizationRoleValues,
   queueJobSchema,
   serviceStateValues,
+  updateMonitorInputSchema,
   webhookHeadersSchema,
   workerEnvironmentSchema,
 } from "./index.js";
@@ -120,6 +121,22 @@ describe("multi-protocol monitor contracts", () => {
         type: "dns",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts protocol configuration changes without weakening legacy HTTP updates", () => {
+    expect(
+      updateMonitorInputSchema.safeParse({
+        configuration: {
+          expectedRecords: ["203.0.113.10"],
+          hostname: "example.com",
+          recordType: "A",
+          type: "dns",
+        },
+      }).success,
+    ).toBe(true);
+    expect(updateMonitorInputSchema.safeParse({ endpointUrl: "https://example.com" }).success).toBe(
+      true,
+    );
   });
 });
 

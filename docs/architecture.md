@@ -15,7 +15,7 @@ flowchart TB
   Adapter --> QStash["QStash"]
   Bull --> Worker["Persistent worker"]
   QStash --> Receiver["Signed API receivers"]
-  Worker --> Target["Validated public HTTP targets"]
+  Worker --> Target["Validated public HTTP/TLS targets and DNS resolver"]
   Receiver --> Target
   Worker --> PG
   Receiver --> PG
@@ -84,8 +84,8 @@ Every tenant-owned table includes organization ownership. Composite foreign keys
 
 1. The scheduler derives a deterministic monitor window and persists it before publishing work.
 2. The executor validates the versioned job and atomically claims the expected window.
-3. The monitoring client validates protocol, port, credentials, query keys, DNS results, redirects, timeout, headers, and response-size limits; the connection uses a pinned approved address.
-4. A unique `(organization, monitor, scheduled_at)` result records bounded evidence without raw response bodies.
+3. The monitoring client selects the versioned HTTP, TLS, or DNS configuration. HTTP and TLS validate public destinations and pin the connection; TLS also uses SNI and platform trust/hostname validation. DNS permits only A, AAAA, CNAME, MX, and TXT lookups with a bounded deadline and exact normalized record-set comparison.
+4. A unique `(organization, monitor, scheduled_at)` result records protocol, region, safe code and bounded evidence without raw response bodies, certificates, or resolver answers.
 5. The policy engine evaluates ordered recent results. Transient failures do not immediately change public state.
 6. When the configured failure threshold is satisfied, concurrent evaluators create or link the same active automatic incident.
 7. Recovery requires the configured consecutive-success threshold. Stale or missing evidence maps to `Unknown`.
@@ -171,9 +171,9 @@ The adapter boundary keeps domain services independent of transport semantics. T
 
 Authentication establishes the user; it does not establish authorization. API services resolve active organization membership on the server, enforce owner/admin/member permissions centrally, and include organization predicates on resource access. The database model carries organization identity through child records and important relations. Cross-tenant integration tests cover each implemented resource family. UI action hiding is usability only; the API independently rejects unauthorized access.
 
-## SSRF defenses and limitations
+## Protocol safety, SSRF defenses, and limitations
 
-Monitor and webhook destinations accept only HTTP(S) on ports 80/443. The application rejects credentials, credential-like query parameters, non-public IPv4/IPv6 ranges, unsafe mixed DNS results, and unsafe redirects. Each redirect is revalidated, and the actual connection is pinned to an address from the approved DNS set to prevent a validation/connect rebinding gap. Methods, headers, redirect count, timeout, and response size are bounded; raw bodies and transport errors are not stored.
+HTTP monitor and webhook destinations accept only HTTP(S) on ports 80/443; TLS monitors accept only HTTPS on port 443. The application rejects credentials, credential-like query parameters, non-public IPv4/IPv6 ranges, unsafe mixed DNS results, and unsafe redirects. Each HTTP/TLS connection is pinned to an address from the approved DNS set to prevent a validation/connect rebinding gap. TLS uses the requested hostname for SNI and certificate validation, never the resolved address alone. DNS monitors do not connect to the requested hostname; they use the platform resolver for the explicitly supported record type and never retain raw replies. Methods, headers, redirect count, timeout, response size, record count, and TXT length are bounded.
 
 These controls reduce application-layer SSRF risk but do not equal network isolation. The free hosted environment has no dedicated deny-by-default egress firewall. A higher-assurance deployment should add network egress policy and allow only required public HTTP(S) destinations.
 
