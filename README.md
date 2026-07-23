@@ -171,7 +171,7 @@ Quota or provider failure leaves durable work pending or failed for inspection; 
 
 DevRelay treats tenant identity, outbound monitoring, provider callbacks, queue duplication, secrets, and public incident projection as explicit trust boundaries. Every tenant-owned query is organization-scoped; HTTP/TLS monitor destinations are restricted to public HTTPS/HTTP addresses and pinned after DNS validation; DNS checks use only the supported record types and bounded safe summaries; callback signatures and replay identities are verified; public projections use allowlisted fields; and raw response bodies, certificates, resolver replies, secrets, and private incident notes are excluded from public output.
 
-Application-layer SSRF controls are not a substitute for a deny-by-default egress firewall, and the free hosted tier does not provide that network boundary. The existing repository security review and its regression coverage are summarized in [docs/security.md](docs/security.md). Outgoing webhook consumers should follow [docs/outgoing-webhooks.md](docs/outgoing-webhooks.md).
+Application-layer SSRF controls are not a substitute for a deny-by-default egress firewall, and the free hosted tier does not provide that network boundary. The existing repository security review and its regression coverage are summarized in [docs/security.md](docs/security.md) and the protocol-specific risks are documented in [docs/threat-model.md](docs/threat-model.md). Outgoing webhook consumers should follow [docs/outgoing-webhooks.md](docs/outgoing-webhooks.md).
 
 ## Roadmap
 
