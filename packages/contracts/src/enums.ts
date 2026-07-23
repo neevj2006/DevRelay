@@ -8,7 +8,9 @@ export const serviceStateValues = [
   "under_maintenance",
 ] as const;
 export const monitorStatusValues = ["pending", "active", "paused", "archived"] as const;
+export const monitorTypeValues = ["http", "tls", "dns"] as const;
 export const monitorMethodValues = ["GET", "HEAD"] as const;
+export const dnsRecordTypeValues = ["A", "AAAA", "CNAME", "MX", "TXT"] as const;
 export const monitorImpactValues = [
   "degraded_performance",
   "partial_outage",
@@ -100,7 +102,9 @@ export const retentionRunStatusValues = ["running", "succeeded", "failed"] as co
 export type OrganizationRole = (typeof organizationRoleValues)[number];
 export type ServiceState = (typeof serviceStateValues)[number];
 export type MonitorStatus = (typeof monitorStatusValues)[number];
+export type MonitorType = (typeof monitorTypeValues)[number];
 export type MonitorMethod = (typeof monitorMethodValues)[number];
+export type DnsRecordType = (typeof dnsRecordTypeValues)[number];
 export type MonitorImpact = (typeof monitorImpactValues)[number];
 export type CheckOutcome = (typeof checkOutcomeValues)[number];
 export type CheckWindowStatus = (typeof checkWindowStatusValues)[number];
