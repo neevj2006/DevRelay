@@ -123,25 +123,25 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
     setBusy(true);
     try {
       const configuration = payload();
-      const saveResponse = await fetch(
-        monitorId
-          ? `/api/backend/organizations/${orgSlug}/monitors/${monitorId}`
-          : `/api/backend/organizations/${orgSlug}/monitors`,
-        {
-          body: JSON.stringify(monitorId ? configuration : configuration),
-          headers: { "content-type": "application/json" },
-          method: monitorId ? "PATCH" : "POST",
-        },
-      );
-      const saved = (await saveResponse.json().catch(() => null)) as {
-        id?: string;
-        message?: string;
-      } | null;
-      if (!saveResponse.ok || (!monitorId && !saved?.id)) {
-        toast.error(saved?.message ?? "Monitor configuration could not be saved.");
-        return;
-      }
-      const id = monitorId ?? saved!.id!;
+      const id =
+        monitorId ??
+        (await (async () => {
+          const saveResponse = await fetch(`/api/backend/organizations/${orgSlug}/monitors`, {
+            body: JSON.stringify(configuration),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          });
+          const saved = (await saveResponse.json().catch(() => null)) as {
+            id?: string;
+            message?: string;
+          } | null;
+          if (!saveResponse.ok || !saved?.id) {
+            toast.error(saved?.message ?? "Monitor configuration could not be saved.");
+            return null;
+          }
+          return saved.id;
+        })());
+      if (!id) return;
       setMonitorId(id);
       const response = await fetch(`/api/backend/organizations/${orgSlug}/monitors/${id}/test`, {
         method: "POST",

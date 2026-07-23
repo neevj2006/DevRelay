@@ -12,14 +12,16 @@ import { apiRequest } from "@/lib/auth-server";
 import { isPublicDemoOrganization } from "@/lib/demo";
 
 type Monitor = {
-  endpointUrl: string;
+  endpointUrl: string | null;
   failureThreshold: number;
   id: string;
   intervalSeconds: number;
   method: string;
+  monitorType: "dns" | "http" | "tls";
   name: string;
   policyPreview: string;
   recoveryThreshold: number;
+  protocolConfig: { hostname?: string; recordType?: string };
   status: string;
 };
 type Service = {
@@ -94,7 +96,7 @@ export default async function ServiceDetailPage({
               <CardHeader>
                 <CardTitle>No monitors</CardTitle>
                 <CardDescription>
-                  Create a safe HTTP check to collect availability evidence.
+                  Create a safe HTTP, TLS, or DNS monitor to collect availability evidence.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -106,7 +108,12 @@ export default async function ServiceDetailPage({
                     <div>
                       <CardTitle>{monitor.name}</CardTitle>
                       <CardDescription className="font-mono">
-                        {monitor.method} {monitor.endpointUrl}
+                        <span className="mr-2 rounded border px-1.5 py-0.5 font-sans text-xs font-medium">
+                          {monitor.monitorType.toUpperCase()}
+                        </span>
+                        {monitor.monitorType === "dns"
+                          ? `${monitor.protocolConfig.recordType ?? "DNS"} ${monitor.protocolConfig.hostname ?? ""}`
+                          : `${monitor.method} ${monitor.endpointUrl ?? ""}`}
                       </CardDescription>
                     </div>
                     <span className="capitalize">{monitor.status}</span>

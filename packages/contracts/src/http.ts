@@ -160,10 +160,13 @@ export const createMonitorInputSchema = z
 
 export const updateMonitorInputSchema = z
   .strictObject({
+    configuration: z
+      .union([tlsMonitorConfigurationSchema, dnsMonitorConfigurationSchema])
+      .optional(),
     endpointUrl: httpEndpointSchema.optional(),
     method: z.enum(monitorMethodValues).optional(),
     name: displayNameSchema.optional(),
-    policy: monitorPolicyInputSchema.optional(),
+    policy: z.union([monitorPolicyInputSchema, protocolMonitorPolicyInputSchema]).optional(),
   })
   .refine((input) => Object.keys(input).length > 0, {
     message: "At least one monitor field must be provided",

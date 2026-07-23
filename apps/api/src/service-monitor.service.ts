@@ -432,17 +432,26 @@ export class ServiceMonitorService {
     const context = await this.manageContext(userId, slug);
     if (Object.keys(input).length === 0)
       throw new BadRequestException("At least one monitor field must be provided");
-    const endpointUrl = input.endpointUrl
-      ? await this.validateEndpoint(input.endpointUrl)
-      : undefined;
+    const configuration = input.configuration;
+    const endpointUrl = configuration
+      ? configuration.type === "dns"
+        ? null
+        : await this.validateEndpoint(configuration.endpointUrl)
+      : input.endpointUrl
+        ? await this.validateEndpoint(input.endpointUrl)
+        : undefined;
     if (input.policy) {
-      this.validateHeaders(input.policy.requestHeaders);
+      if ("requestHeaders" in input.policy) this.validateHeaders(input.policy.requestHeaders);
       this.enforceHostedInterval(input.policy.intervalSeconds);
     }
     return this.databaseService.database.transaction(async (transaction) => {
       const updated = await transaction.execute(sql`
-        UPDATE monitors SET name = COALESCE(${input.name ?? null}, name), endpoint_url = COALESCE(${endpointUrl ?? null}, endpoint_url),
-          method = COALESCE(${input.method ?? null}, method), configuration_version = configuration_version + 1,
+        UPDATE monitors SET name = COALESCE(${input.name ?? null}, name),
+          monitor_type = COALESCE(${configuration?.type ?? null}, monitor_type),
+          endpoint_url = CASE WHEN ${configuration !== undefined} THEN ${endpointUrl ?? null} ELSE COALESCE(${endpointUrl ?? null}, endpoint_url) END,
+          method = CASE WHEN ${configuration !== undefined} THEN 'GET'::monitor_method ELSE COALESCE(${input.method ?? null}, method) END,
+          protocol_config = COALESCE(${configuration ? JSON.stringify(configuration) : null}::jsonb, protocol_config),
+          configuration_version = configuration_version + 1,
           tested_configuration_version = NULL, last_tested_at = NULL, last_test_evidence = NULL,
           status = CASE WHEN status = 'active' THEN 'pending' ELSE status END, next_due_at = NULL, updated_at = now()
         WHERE id = ${monitorId} AND organization_id = ${context.organizationId} AND deleted_at IS NULL RETURNING id
@@ -452,7 +461,8 @@ export class ServiceMonitorService {
         await transaction.execute(sql`
         UPDATE monitor_policies SET interval_seconds = ${input.policy.intervalSeconds}, timeout_milliseconds = ${input.policy.timeoutMilliseconds},
           failure_threshold = ${input.policy.failureThreshold}, recovery_threshold = ${input.policy.recoveryThreshold}, failure_impact = ${input.policy.failureImpact},
-          accepted_status_codes = ${JSON.stringify(input.policy.acceptedStatusCodes)}::jsonb, request_headers = ${JSON.stringify(this.validateHeaders(input.policy.requestHeaders))}::jsonb, updated_at = now()
+          accepted_status_codes = ${JSON.stringify("acceptedStatusCodes" in input.policy ? input.policy.acceptedStatusCodes : [{ from: 200, to: 399 }])}::jsonb,
+          request_headers = ${JSON.stringify("requestHeaders" in input.policy ? this.validateHeaders(input.policy.requestHeaders) : {})}::jsonb, updated_at = now()
         WHERE monitor_id = ${monitorId} AND organization_id = ${context.organizationId}
       `);
       await this.audit(
