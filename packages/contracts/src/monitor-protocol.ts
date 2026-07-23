@@ -32,7 +32,6 @@ const dnsAConfigurationSchema = z.strictObject({
   expectedRecords: z.array(ipv4AddressSchema).min(1).max(32),
   hostname: dnsHostnameSchema,
   recordType: z.literal("A"),
-  timeoutMilliseconds: z.number().int().min(1000).max(15_000).default(5000),
   type: z.literal("dns"),
 });
 
@@ -40,7 +39,6 @@ const dnsAaaaConfigurationSchema = z.strictObject({
   expectedRecords: z.array(ipv6AddressSchema).min(1).max(32),
   hostname: dnsHostnameSchema,
   recordType: z.literal("AAAA"),
-  timeoutMilliseconds: z.number().int().min(1000).max(15_000).default(5000),
   type: z.literal("dns"),
 });
 
@@ -48,7 +46,6 @@ const dnsCnameConfigurationSchema = z.strictObject({
   expectedRecords: z.array(absoluteHostnameSchema).min(1).max(32),
   hostname: dnsHostnameSchema,
   recordType: z.literal("CNAME"),
-  timeoutMilliseconds: z.number().int().min(1000).max(15_000).default(5000),
   type: z.literal("dns"),
 });
 
@@ -64,7 +61,6 @@ const dnsMxConfigurationSchema = z.strictObject({
     .max(32),
   hostname: dnsHostnameSchema,
   recordType: z.literal("MX"),
-  timeoutMilliseconds: z.number().int().min(1000).max(15_000).default(5000),
   type: z.literal("dns"),
 });
 
@@ -72,7 +68,6 @@ const dnsTxtConfigurationSchema = z.strictObject({
   expectedRecords: z.array(txtRecordSchema).min(1).max(32),
   hostname: dnsHostnameSchema,
   recordType: z.literal("TXT"),
-  timeoutMilliseconds: z.number().int().min(1000).max(15_000).default(5000),
   type: z.literal("dns"),
 });
 
@@ -85,7 +80,6 @@ export const httpMonitorConfigurationSchema = z.strictObject({
 export const tlsMonitorConfigurationSchema = z.strictObject({
   endpointUrl: tlsEndpointSchema,
   expiryWarningDays: z.number().int().min(1).max(365).default(30),
-  timeoutMilliseconds: z.number().int().min(1000).max(30_000).default(10_000),
   type: z.literal("tls"),
 });
 
@@ -105,6 +99,12 @@ export const monitorProtocolConfigurationSchema = z.discriminatedUnion("type", [
 
 export const supportedMonitorTypeSchema = z.enum(monitorTypeValues);
 export const supportedDnsRecordTypeSchema = z.enum(dnsRecordTypeValues);
+
+export const monitorProtocolDefaultTimeoutMilliseconds = {
+  dns: 5_000,
+  http: 5_000,
+  tls: 10_000,
+} as const;
 
 export type HttpMonitorConfiguration = z.infer<typeof httpMonitorConfigurationSchema>;
 export type TlsMonitorConfiguration = z.infer<typeof tlsMonitorConfigurationSchema>;

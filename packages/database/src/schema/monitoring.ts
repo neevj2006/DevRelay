@@ -5,6 +5,7 @@ import {
   monitorMethodValues,
   monitorPolicyStateValues,
   monitorStatusValues,
+  monitorTypeValues,
   serviceStateValues,
   workerDeploymentModeValues,
   workerQueueAdapterValues,
@@ -46,6 +47,8 @@ export const serviceState = pgEnum("service_state", serviceStateValues);
 export const monitorStatus = pgEnum("monitor_status", monitorStatusValues);
 
 export const monitorMethod = pgEnum("monitor_method", monitorMethodValues);
+
+export const monitorType = pgEnum("monitor_type", monitorTypeValues);
 
 export const monitorImpact = pgEnum("monitor_impact", monitorImpactValues);
 
@@ -103,8 +106,13 @@ export const monitors = pgTable(
     }),
     serviceId: uuid("service_id").notNull(),
     name: text("name").notNull(),
-    endpointUrl: text("endpoint_url").notNull(),
+    monitorType: monitorType("monitor_type").default("http").notNull(),
+    endpointUrl: text("endpoint_url"),
     method: monitorMethod("method").default("GET").notNull(),
+    protocolConfig: jsonb("protocol_config")
+      .$type<Record<string, unknown>>()
+      .default(sql`'{"type":"http"}'::jsonb`)
+      .notNull(),
     status: monitorStatus("status").default("pending").notNull(),
     configurationVersion: integer("configuration_version").default(1).notNull(),
     testedConfigurationVersion: integer("tested_configuration_version"),
@@ -135,7 +143,14 @@ export const monitors = pgTable(
       sql`(${table.status} = 'paused' AND ${table.pausedAt} IS NOT NULL) OR (${table.status} <> 'paused' AND ${table.pausedAt} IS NULL)`,
     ),
     check("monitors_name_nonempty", sql`length(trim(${table.name})) BETWEEN 1 AND 120`),
-    check("monitors_endpoint_length", sql`length(${table.endpointUrl}) BETWEEN 1 AND 2048`),
+    check(
+      "monitors_protocol_configuration_valid",
+      sql`jsonb_typeof(${table.protocolConfig}) = 'object' AND ${table.protocolConfig}->>'type' = ${table.monitorType}::text`,
+    ),
+    check(
+      "monitors_endpoint_configuration_consistent",
+      sql`(${table.monitorType} IN ('http', 'tls') AND length(${table.endpointUrl}) BETWEEN 1 AND 2048) OR (${table.monitorType} = 'dns' AND ${table.endpointUrl} IS NULL)`,
+    ),
     check("monitors_configuration_version_positive", sql`${table.configurationVersion} > 0`),
     check(
       "monitors_tested_version_valid",
@@ -265,6 +280,7 @@ export const checkResults = pgTable(
     finishedAt: timestamp("finished_at", instant).notNull(),
     latencyMilliseconds: integer("latency_milliseconds"),
     httpStatusCode: integer("http_status_code"),
+    protocol: monitorType("protocol").default("http").notNull(),
     region: text("region").notNull(),
     evidenceCode: text("evidence_code").notNull(),
     evidenceSummary: text("evidence_summary").notNull(),

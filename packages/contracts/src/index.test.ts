@@ -87,7 +87,6 @@ describe("multi-protocol monitor contracts", () => {
       }),
     ).toMatchObject({
       expiryWarningDays: 30,
-      timeoutMilliseconds: 10_000,
       type: "tls",
     });
   });

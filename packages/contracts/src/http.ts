@@ -12,6 +12,10 @@ import {
   organizationRoleValues,
   serviceStateValues,
 } from "./enums.js";
+import {
+  dnsMonitorConfigurationSchema,
+  tlsMonitorConfigurationSchema,
+} from "./monitor-protocol.js";
 
 const displayNameSchema = z.string().trim().min(1).max(120);
 const httpEndpointSchema = z.url().refine((value) => {
@@ -100,15 +104,56 @@ export const monitorPolicyInputSchema = z.strictObject({
   timeoutMilliseconds: z.number().int().min(100).max(30_000),
 });
 
+export const protocolMonitorPolicyInputSchema = z.strictObject({
+  failureImpact: z.enum(monitorImpactValues).default("major_outage"),
+  failureThreshold: z.number().int().min(1).max(10).default(3),
+  intervalSeconds: z.number().int().min(10).max(86_400),
+  recoveryThreshold: z.number().int().min(1).max(10).default(2),
+  timeoutMilliseconds: z.number().int().min(1000).max(30_000),
+});
+
+const monitorPolicyTimeoutRefinement = (input: {
+  policy: { intervalSeconds: number; timeoutMilliseconds: number };
+}) => input.policy.timeoutMilliseconds < input.policy.intervalSeconds * 1000;
+
+const createHttpMonitorInputSchema = z.strictObject({
+  endpointUrl: httpEndpointSchema,
+  method: z.enum(monitorMethodValues).default("GET"),
+  name: displayNameSchema,
+  policy: monitorPolicyInputSchema,
+  serviceId: uuidSchema,
+  type: z.literal("http"),
+});
+
+const createTlsMonitorInputSchema = z.strictObject({
+  configuration: tlsMonitorConfigurationSchema,
+  name: displayNameSchema,
+  policy: protocolMonitorPolicyInputSchema,
+  serviceId: uuidSchema,
+  type: z.literal("tls"),
+});
+
+const createDnsMonitorInputSchema = z.strictObject({
+  configuration: dnsMonitorConfigurationSchema,
+  name: displayNameSchema,
+  policy: protocolMonitorPolicyInputSchema,
+  serviceId: uuidSchema,
+  type: z.literal("dns"),
+});
+
 export const createMonitorInputSchema = z
-  .strictObject({
-    endpointUrl: httpEndpointSchema,
-    method: z.enum(monitorMethodValues).default("GET"),
-    name: displayNameSchema,
-    policy: monitorPolicyInputSchema,
-    serviceId: uuidSchema,
-  })
-  .refine((input) => input.policy.timeoutMilliseconds < input.policy.intervalSeconds * 1000, {
+  .preprocess(
+    (input) =>
+      typeof input === "object" && input !== null && !("type" in input)
+        ? { ...input, type: "http" }
+        : input,
+    z.discriminatedUnion("type", [
+      createHttpMonitorInputSchema,
+      createTlsMonitorInputSchema,
+      createDnsMonitorInputSchema,
+    ]),
+  )
+  .refine(monitorPolicyTimeoutRefinement, {
     message: "timeout must be shorter than the monitor interval",
     path: ["policy"],
   });

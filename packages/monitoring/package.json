@@ -15,6 +15,9 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@devrelay/contracts": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "4.1.10"
   }
