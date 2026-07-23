@@ -373,25 +373,31 @@ export class ServiceMonitorService {
   async createMonitor(userId: string, slug: string, input: CreateMonitorInput) {
     const context = await this.manageContext(userId, slug);
     await this.requireService(context.organizationId, input.serviceId);
+    const monitorType = input.type ?? "http";
+    const httpInput = input as Extract<CreateMonitorInput, { type: "http" }>;
     const endpointUrl =
-      input.type === "dns"
+      monitorType === "dns"
         ? null
         : await this.validateEndpoint(
-            input.type === "http" ? input.endpointUrl : input.configuration.endpointUrl,
+            monitorType === "http"
+              ? httpInput.endpointUrl
+              : (input as Extract<CreateMonitorInput, { type: "tls" }>).configuration.endpointUrl,
           );
     const requestHeaders =
-      input.type === "http" ? this.validateHeaders(input.policy.requestHeaders) : {};
+      monitorType === "http" ? this.validateHeaders(httpInput.policy.requestHeaders) : {};
     const acceptedStatusCodes =
-      input.type === "http" ? input.policy.acceptedStatusCodes : [{ from: 200, to: 399 }];
-    const method = input.type === "http" ? input.method : "GET";
+      monitorType === "http" ? httpInput.policy.acceptedStatusCodes : [{ from: 200, to: 399 }];
+    const method = monitorType === "http" ? httpInput.method : "GET";
     const protocolConfig =
-      input.type === "http" ? { endpointUrl, method, type: "http" } : input.configuration;
+      monitorType === "http"
+        ? { endpointUrl, method, type: "http" }
+        : (input as Exclude<CreateMonitorInput, { type: "http" }>).configuration;
     this.enforceHostedInterval(input.policy.intervalSeconds);
     try {
       return await this.databaseService.database.transaction(async (transaction) => {
         const id = randomUUID();
         await transaction.execute(
-          sql`INSERT INTO monitors (id, organization_id, service_id, name, monitor_type, endpoint_url, method, protocol_config) VALUES (${id}, ${context.organizationId}, ${input.serviceId}, ${input.name}, ${input.type}, ${endpointUrl}, ${method}, ${JSON.stringify(protocolConfig)}::jsonb)`,
+          sql`INSERT INTO monitors (id, organization_id, service_id, name, monitor_type, endpoint_url, method, protocol_config) VALUES (${id}, ${context.organizationId}, ${input.serviceId}, ${input.name}, ${monitorType}, ${endpointUrl}, ${method}, ${JSON.stringify(protocolConfig)}::jsonb)`,
         );
         await transaction.execute(sql`
           INSERT INTO monitor_policies (organization_id, monitor_id, interval_seconds, timeout_milliseconds, failure_threshold, recovery_threshold, failure_impact, accepted_status_codes, request_headers)
@@ -405,9 +411,11 @@ export class ServiceMonitorService {
           "monitor",
           id,
           {
-            monitorType: input.type,
+            monitorType,
             target:
-              input.type === "dns" ? input.configuration.hostname : new URL(endpointUrl!).hostname,
+              monitorType === "dns"
+                ? (input as Extract<CreateMonitorInput, { type: "dns" }>).configuration.hostname
+                : new URL(endpointUrl!).hostname,
             serviceId: input.serviceId,
           },
         );
