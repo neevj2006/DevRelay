@@ -43,6 +43,8 @@ describe("HTTP contracts", () => {
       serviceId: uuid,
     });
 
+    expect(result.type).toBe("http");
+    if (result.type !== "http") throw new Error("Expected a normalized HTTP monitor input");
     expect(result.method).toBe("GET");
     expect(result.policy.failureThreshold).toBe(3);
     expect(result.policy.recoveryThreshold).toBe(2);
