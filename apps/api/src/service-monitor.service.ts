@@ -4,6 +4,7 @@ import type {
   CreateMonitorInput,
   CreateServiceInput,
   CreateServiceStateOverrideInput,
+  MonitorProtocolConfiguration,
   OrganizationRole,
   UpdateMonitorInput,
   UpdateServiceInput,
@@ -12,7 +13,9 @@ import type { DatabaseTransaction } from "@devrelay/database";
 import {
   describeMonitorPolicy,
   EndpointPolicyError,
+  runSafeDnsMonitorTest,
   runSafeMonitorTest,
+  runSafeTlsMonitorTest,
   validateEndpointDestination,
   validateRequestHeaders,
 } from "@devrelay/monitoring";
@@ -33,15 +36,17 @@ type Context = { organizationId: string; role: OrganizationRole };
 type MonitorRecord = {
   acceptedStatusCodes: readonly { from: number; to: number }[];
   configurationVersion: number;
-  endpointUrl: string;
+  endpointUrl: string | null;
   failureImpact: string;
   failureThreshold: number;
   id: string;
   intervalSeconds: number;
   method: "GET" | "HEAD";
+  monitorType: "dns" | "http" | "tls";
   name: string;
   organizationId: string;
   recoveryThreshold: number;
+  protocolConfig: Record<string, unknown>;
   requestHeaders: Record<string, string>;
   serviceId: string;
   status: "pending" | "active" | "paused" | "archived";
@@ -368,18 +373,35 @@ export class ServiceMonitorService {
   async createMonitor(userId: string, slug: string, input: CreateMonitorInput) {
     const context = await this.manageContext(userId, slug);
     await this.requireService(context.organizationId, input.serviceId);
-    const endpointUrl = await this.validateEndpoint(input.endpointUrl);
-    const requestHeaders = this.validateHeaders(input.policy.requestHeaders);
+    const monitorType = input.type ?? "http";
+    const httpInput = input as Extract<CreateMonitorInput, { type: "http" }>;
+    const endpointUrl =
+      monitorType === "dns"
+        ? null
+        : await this.validateEndpoint(
+            monitorType === "http"
+              ? httpInput.endpointUrl
+              : (input as Extract<CreateMonitorInput, { type: "tls" }>).configuration.endpointUrl,
+          );
+    const requestHeaders =
+      monitorType === "http" ? this.validateHeaders(httpInput.policy.requestHeaders) : {};
+    const acceptedStatusCodes =
+      monitorType === "http" ? httpInput.policy.acceptedStatusCodes : [{ from: 200, to: 399 }];
+    const method = monitorType === "http" ? httpInput.method : "GET";
+    const protocolConfig =
+      monitorType === "http"
+        ? { endpointUrl, method, type: "http" }
+        : (input as Exclude<CreateMonitorInput, { type: "http" }>).configuration;
     this.enforceHostedInterval(input.policy.intervalSeconds);
     try {
       return await this.databaseService.database.transaction(async (transaction) => {
         const id = randomUUID();
         await transaction.execute(
-          sql`INSERT INTO monitors (id, organization_id, service_id, name, endpoint_url, method) VALUES (${id}, ${context.organizationId}, ${input.serviceId}, ${input.name}, ${endpointUrl}, ${input.method})`,
+          sql`INSERT INTO monitors (id, organization_id, service_id, name, monitor_type, endpoint_url, method, protocol_config) VALUES (${id}, ${context.organizationId}, ${input.serviceId}, ${input.name}, ${monitorType}, ${endpointUrl}, ${method}, ${JSON.stringify(protocolConfig)}::jsonb)`,
         );
         await transaction.execute(sql`
           INSERT INTO monitor_policies (organization_id, monitor_id, interval_seconds, timeout_milliseconds, failure_threshold, recovery_threshold, failure_impact, accepted_status_codes, request_headers)
-          VALUES (${context.organizationId}, ${id}, ${input.policy.intervalSeconds}, ${input.policy.timeoutMilliseconds}, ${input.policy.failureThreshold}, ${input.policy.recoveryThreshold}, ${input.policy.failureImpact}, ${JSON.stringify(input.policy.acceptedStatusCodes)}::jsonb, ${JSON.stringify(requestHeaders)}::jsonb)
+          VALUES (${context.organizationId}, ${id}, ${input.policy.intervalSeconds}, ${input.policy.timeoutMilliseconds}, ${input.policy.failureThreshold}, ${input.policy.recoveryThreshold}, ${input.policy.failureImpact}, ${JSON.stringify(acceptedStatusCodes)}::jsonb, ${JSON.stringify(requestHeaders)}::jsonb)
         `);
         await this.audit(
           transaction,
@@ -389,8 +411,11 @@ export class ServiceMonitorService {
           "monitor",
           id,
           {
-            endpointHost: new URL(endpointUrl).hostname,
-            method: input.method,
+            monitorType,
+            target:
+              monitorType === "dns"
+                ? (input as Extract<CreateMonitorInput, { type: "dns" }>).configuration.hostname
+                : new URL(endpointUrl!).hostname,
             serviceId: input.serviceId,
           },
         );
@@ -454,12 +479,31 @@ export class ServiceMonitorService {
       throw new ConflictException("Archived monitors cannot be tested");
     let networkEvidence;
     try {
-      networkEvidence = await runSafeMonitorTest({
-        endpointUrl: monitor.endpointUrl,
-        headers: monitor.requestHeaders,
-        method: monitor.method,
-        timeoutMilliseconds: monitor.timeoutMilliseconds,
-      });
+      if (monitor.monitorType === "http") {
+        if (!monitor.endpointUrl) throw new BadRequestException("HTTP monitor has no endpoint");
+        networkEvidence = await runSafeMonitorTest({
+          endpointUrl: monitor.endpointUrl,
+          headers: monitor.requestHeaders,
+          method: monitor.method,
+          timeoutMilliseconds: monitor.timeoutMilliseconds,
+        });
+      } else if (monitor.monitorType === "tls") {
+        networkEvidence = await runSafeTlsMonitorTest({
+          configuration: monitor.protocolConfig as Extract<
+            MonitorProtocolConfiguration,
+            { type: "tls" }
+          >,
+          timeoutMilliseconds: monitor.timeoutMilliseconds,
+        });
+      } else {
+        networkEvidence = await runSafeDnsMonitorTest({
+          configuration: monitor.protocolConfig as Extract<
+            MonitorProtocolConfiguration,
+            { type: "dns" }
+          >,
+          timeoutMilliseconds: monitor.timeoutMilliseconds,
+        });
+      }
     } catch (error) {
       if (error instanceof EndpointPolicyError) {
         throw new BadRequestException({ error: error.code, message: error.message });
@@ -467,11 +511,13 @@ export class ServiceMonitorService {
       throw error;
     }
     const statusAccepted =
-      networkEvidence.httpStatusCode !== null &&
-      monitor.acceptedStatusCodes.some(
-        ({ from, to }) =>
-          networkEvidence.httpStatusCode! >= from && networkEvidence.httpStatusCode! <= to,
-      );
+      monitor.monitorType !== "http" ||
+      ("httpStatusCode" in networkEvidence &&
+        networkEvidence.httpStatusCode !== null &&
+        monitor.acceptedStatusCodes.some(
+          ({ from, to }) =>
+            networkEvidence.httpStatusCode! >= from && networkEvidence.httpStatusCode! <= to,
+        ));
     const evidence = {
       ...networkEvidence,
       ok: networkEvidence.ok && statusAccepted,
@@ -490,9 +536,9 @@ export class ServiceMonitorService {
         monitorId,
         {
           code: evidence.code,
-          httpStatusCode: evidence.httpStatusCode,
+          monitorType: monitor.monitorType,
           ok: evidence.ok,
-          redirectCount: evidence.redirectCount,
+          resultCode: evidence.code,
         },
       );
     });
@@ -597,7 +643,7 @@ export class ServiceMonitorService {
     return this.databaseService.database
       .execute(
         sql`
-      SELECT monitor.id, monitor.organization_id AS "organizationId", monitor.service_id AS "serviceId", monitor.name, monitor.endpoint_url AS "endpointUrl", monitor.method, monitor.status,
+      SELECT monitor.id, monitor.organization_id AS "organizationId", monitor.service_id AS "serviceId", monitor.name, monitor.monitor_type AS "monitorType", monitor.protocol_config AS "protocolConfig", monitor.endpoint_url AS "endpointUrl", monitor.method, monitor.status,
         monitor.configuration_version AS "configurationVersion", monitor.tested_configuration_version AS "testedConfigurationVersion", monitor.last_tested_at AS "lastTestedAt", monitor.last_test_evidence AS "lastTestEvidence", monitor.updated_at AS "updatedAt",
         policy.interval_seconds AS "intervalSeconds", policy.timeout_milliseconds AS "timeoutMilliseconds", policy.failure_threshold AS "failureThreshold", policy.recovery_threshold AS "recoveryThreshold", policy.failure_impact AS "failureImpact", policy.accepted_status_codes AS "acceptedStatusCodes", policy.request_headers AS "requestHeaders"
       FROM monitors AS monitor JOIN monitor_policies AS policy ON policy.monitor_id = monitor.id AND policy.organization_id = monitor.organization_id
@@ -615,7 +661,7 @@ export class ServiceMonitorService {
     monitorId: string,
   ): Promise<MonitorRecord & { policyPreview: string }> {
     const result = await executor.execute<MonitorRecord>(sql`
-      SELECT monitor.id, monitor.organization_id AS "organizationId", monitor.service_id AS "serviceId", monitor.name, monitor.endpoint_url AS "endpointUrl", monitor.method, monitor.status,
+      SELECT monitor.id, monitor.organization_id AS "organizationId", monitor.service_id AS "serviceId", monitor.name, monitor.monitor_type AS "monitorType", monitor.protocol_config AS "protocolConfig", monitor.endpoint_url AS "endpointUrl", monitor.method, monitor.status,
         monitor.configuration_version AS "configurationVersion", monitor.tested_configuration_version AS "testedConfigurationVersion", monitor.updated_at AS "updatedAt",
         policy.interval_seconds AS "intervalSeconds", policy.timeout_milliseconds AS "timeoutMilliseconds", policy.failure_threshold AS "failureThreshold", policy.recovery_threshold AS "recoveryThreshold", policy.failure_impact AS "failureImpact", policy.accepted_status_codes AS "acceptedStatusCodes", policy.request_headers AS "requestHeaders"
       FROM monitors AS monitor JOIN monitor_policies AS policy ON policy.monitor_id = monitor.id AND policy.organization_id = monitor.organization_id

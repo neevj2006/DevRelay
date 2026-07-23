@@ -8,6 +8,8 @@ import {
   incidentWebhookPayloadV1Schema,
   monitorCheckJobSchema,
   monitorImpactValues,
+  monitorProtocolConfigurationSchema,
+  monitorTypeValues,
   notificationDeliveryJobSchema,
   organizationRoleValues,
   queueJobSchema,
@@ -23,6 +25,7 @@ describe("shared enums", () => {
   it("exposes stable persisted values", () => {
     expect(organizationRoleValues).toEqual(["owner", "admin", "member"]);
     expect(monitorImpactValues).toEqual(["degraded_performance", "partial_outage", "major_outage"]);
+    expect(monitorTypeValues).toEqual(["http", "tls", "dns"]);
     expect(serviceStateValues).toContain("unknown");
   });
 });
@@ -40,6 +43,8 @@ describe("HTTP contracts", () => {
       serviceId: uuid,
     });
 
+    expect(result.type).toBe("http");
+    if (result.type !== "http") throw new Error("Expected a normalized HTTP monitor input");
     expect(result.method).toBe("GET");
     expect(result.policy.failureThreshold).toBe(3);
     expect(result.policy.recoveryThreshold).toBe(2);
@@ -70,6 +75,49 @@ describe("HTTP contracts", () => {
         ...baseInput,
         extra: "not allowed",
         policy: { ...baseInput.policy, timeoutMilliseconds: 1000 },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("multi-protocol monitor contracts", () => {
+  it("accepts bounded TLS configuration with safe defaults", () => {
+    expect(
+      monitorProtocolConfigurationSchema.parse({
+        endpointUrl: "https://example.com/health",
+        type: "tls",
+      }),
+    ).toMatchObject({
+      expiryWarningDays: 30,
+      type: "tls",
+    });
+  });
+
+  it("uses normalized exact DNS record sets and rejects unsupported input", () => {
+    expect(
+      monitorProtocolConfigurationSchema.parse({
+        expectedRecords: [{ exchange: "MAIL.EXAMPLE.COM", priority: 10 }],
+        hostname: "Example.com",
+        recordType: "MX",
+        type: "dns",
+      }),
+    ).toMatchObject({
+      expectedRecords: [{ exchange: "mail.example.com.", priority: 10 }],
+      hostname: "example.com.",
+      recordType: "MX",
+    });
+    expect(
+      monitorProtocolConfigurationSchema.safeParse({
+        endpointUrl: "https://example.com:8443",
+        type: "tls",
+      }).success,
+    ).toBe(false);
+    expect(
+      monitorProtocolConfigurationSchema.safeParse({
+        expectedRecords: ["x".repeat(1025)],
+        hostname: "example.com",
+        recordType: "TXT",
+        type: "dns",
       }).success,
     ).toBe(false);
   });

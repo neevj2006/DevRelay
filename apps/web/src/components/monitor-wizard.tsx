@@ -39,7 +39,12 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("API health");
+  const [monitorType, setMonitorType] = useState<"http" | "tls" | "dns">("http");
   const [endpoint, setEndpoint] = useState("https://1.1.1.1/");
+  const [hostname, setHostname] = useState("example.com");
+  const [dnsRecordType, setDnsRecordType] = useState<"A" | "AAAA" | "CNAME" | "MX" | "TXT">("A");
+  const [expectedRecords, setExpectedRecords] = useState("93.184.216.34");
+  const [expiryWarningDays, setExpiryWarningDays] = useState(30);
   const [method, setMethod] = useState<"GET" | "HEAD">("GET");
   const [timeout, setTimeoutValue] = useState(5000);
   const [statusCodes, setStatusCodes] = useState("200-299");
@@ -59,20 +64,58 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
         const [from, to = from] = value.split("-").map(Number);
         return { from, to };
       });
+    const policy = {
+      failureImpact: "major_outage",
+      failureThreshold,
+      intervalSeconds: interval,
+      recoveryThreshold,
+      timeoutMilliseconds: timeout,
+    };
+    if (monitorType === "tls") {
+      return {
+        configuration: { endpointUrl: endpoint, expiryWarningDays, type: "tls" as const },
+        name,
+        policy,
+        serviceId,
+        type: "tls" as const,
+      };
+    }
+    if (monitorType === "dns") {
+      const records = expectedRecords
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const dnsRecords =
+        dnsRecordType === "MX"
+          ? records.map((value) => {
+              const [priority, exchange] = value.split(/\s+/, 2);
+              return { exchange, priority: Number(priority) };
+            })
+          : records;
+      return {
+        configuration: {
+          expectedRecords: dnsRecords,
+          hostname,
+          recordType: dnsRecordType,
+          type: "dns" as const,
+        },
+        name,
+        policy,
+        serviceId,
+        type: "dns" as const,
+      };
+    }
     return {
       endpointUrl: endpoint,
       method,
       name,
       policy: {
         acceptedStatusCodes: ranges,
-        failureImpact: "major_outage",
-        failureThreshold,
-        intervalSeconds: interval,
-        recoveryThreshold,
         requestHeaders: {},
-        timeoutMilliseconds: timeout,
+        ...policy,
       },
       serviceId,
+      type: "http" as const,
     };
   }
 
@@ -85,16 +128,7 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
           ? `/api/backend/organizations/${orgSlug}/monitors/${monitorId}`
           : `/api/backend/organizations/${orgSlug}/monitors`,
         {
-          body: JSON.stringify(
-            monitorId
-              ? {
-                  endpointUrl: configuration.endpointUrl,
-                  method,
-                  name,
-                  policy: configuration.policy,
-                }
-              : configuration,
-          ),
+          body: JSON.stringify(monitorId ? configuration : configuration),
           headers: { "content-type": "application/json" },
           method: monitorId ? "PATCH" : "POST",
         },
@@ -124,7 +158,7 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
         return;
       }
       setTestSummary(
-        `${evidence?.summary ?? "Test completed"}${evidence?.httpStatusCode ? ` in ${evidence.durationMilliseconds} ms` : ""}. No response body was retained.`,
+        `${evidence?.summary ?? "Test completed"}${evidence?.durationMilliseconds ? ` in ${evidence.durationMilliseconds} ms` : ""}. Safe evidence only was retained.`,
       );
       setTested(Boolean(evidence?.ok));
       if (!evidence?.ok) toast.error("The endpoint did not satisfy the accepted status policy.");
@@ -179,7 +213,7 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
             <CardHeader>
               <CardTitle>Monitor basics</CardTitle>
               <CardDescription>
-                Name the monitor and provide the public HTTP or HTTPS endpoint to check.
+                Select a monitor type before entering only its relevant safe configuration.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -192,24 +226,109 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                   value={name}
                 />
               </FormField>
-              <FormField
-                description="Private, loopback, link-local, metadata, credential-bearing, and restricted-port targets are rejected."
-                id="monitor-endpoint"
-                label="Endpoint URL"
-                required
+              <div
+                className="grid gap-3 sm:grid-cols-3"
+                role="radiogroup"
+                aria-label="Monitor type"
               >
-                <Input
-                  onChange={(event) => {
-                    setEndpoint(event.target.value);
-                    setTested(false);
-                  }}
-                  type="url"
-                  value={endpoint}
-                />
-              </FormField>
+                {(["http", "tls", "dns"] as const).map((type) => (
+                  <Button
+                    key={type}
+                    aria-checked={monitorType === type}
+                    onClick={() => {
+                      setMonitorType(type);
+                      setTested(false);
+                    }}
+                    role="radio"
+                    type="button"
+                    variant={monitorType === type ? "default" : "outline"}
+                  >
+                    {type === "http" ? "HTTP" : type === "tls" ? "TLS" : "DNS"}
+                  </Button>
+                ))}
+              </div>
+              {monitorType !== "dns" ? (
+                <FormField
+                  description="Private, loopback, link-local, metadata, credential-bearing, and restricted-port targets are rejected."
+                  id="monitor-endpoint"
+                  label={monitorType === "tls" ? "HTTPS endpoint" : "Endpoint URL"}
+                  required
+                >
+                  <Input
+                    onChange={(event) => {
+                      setEndpoint(event.target.value);
+                      setTested(false);
+                    }}
+                    type="url"
+                    value={endpoint}
+                  />
+                </FormField>
+              ) : (
+                <>
+                  <FormField
+                    description="DevRelay uses its configured recursive resolver; custom resolvers are not accepted."
+                    id="monitor-hostname"
+                    label="DNS hostname"
+                    required
+                  >
+                    <Input
+                      onChange={(event) => {
+                        setHostname(event.target.value);
+                        setTested(false);
+                      }}
+                      value={hostname}
+                    />
+                  </FormField>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="dns-record-type">Record type</Label>
+                      <Select
+                        onValueChange={(value) => {
+                          setDnsRecordType(value as typeof dnsRecordType);
+                          setTested(false);
+                        }}
+                        value={dnsRecordType}
+                      >
+                        <SelectTrigger className="mt-2 w-full" id="dns-record-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["A", "AAAA", "CNAME", "MX", "TXT"].map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <FormField
+                      description={
+                        dnsRecordType === "MX"
+                          ? "Comma-separated priority and hostname pairs, for example: 10 mail.example.com."
+                          : "Comma-separated exact expected records."
+                      }
+                      id="expected-records"
+                      label="Expected records"
+                      required
+                    >
+                      <Input
+                        onChange={(event) => {
+                          setExpectedRecords(event.target.value);
+                          setTested(false);
+                        }}
+                        value={expectedRecords}
+                      />
+                    </FormField>
+                  </div>
+                </>
+              )}
               <InlineFeedback
                 description="DevRelay re-resolves DNS and validates every redirect before connecting."
-                title="Endpoint safety is enforced server-side"
+                title={
+                  monitorType === "dns"
+                    ? "DNS evidence is bounded server-side"
+                    : "Endpoint safety is enforced server-side"
+                }
                 tone="info"
               />
             </CardContent>
@@ -218,30 +337,36 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
         {step === 1 ? (
           <>
             <CardHeader>
-              <CardTitle>Request behavior</CardTitle>
+              <CardTitle>
+                {monitorType === "http"
+                  ? "Request behavior"
+                  : `${monitorType.toUpperCase()} behavior`}
+              </CardTitle>
               <CardDescription>
                 Use a constrained request that never stores response bodies or sensitive headers.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="method">HTTP method</Label>
-                <Select
-                  onValueChange={(value) => {
-                    setMethod(value as "GET" | "HEAD");
-                    setTested(false);
-                  }}
-                  value={method}
-                >
-                  <SelectTrigger className="mt-2 w-full" id="method">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GET">GET</SelectItem>
-                    <SelectItem value="HEAD">HEAD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {monitorType === "http" ? (
+                <div>
+                  <Label htmlFor="method">HTTP method</Label>
+                  <Select
+                    onValueChange={(value) => {
+                      setMethod(value as "GET" | "HEAD");
+                      setTested(false);
+                    }}
+                    value={method}
+                  >
+                    <SelectTrigger className="mt-2 w-full" id="method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="HEAD">HEAD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <FormField
                 description="Maximum time before the check fails."
                 id="timeout"
@@ -257,20 +382,40 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                   value={timeout}
                 />
               </FormField>
-              <FormField
-                className="sm:col-span-2"
-                description="Comma-separated ranges. Redirects are followed only after safety validation."
-                id="status-codes"
-                label="Accepted status codes"
-              >
-                <Input
-                  onChange={(event) => {
-                    setStatusCodes(event.target.value);
-                    setTested(false);
-                  }}
-                  value={statusCodes}
-                />
-              </FormField>
+              {monitorType === "tls" ? (
+                <FormField
+                  description="A valid certificate inside this window produces a visible warning, not an incident."
+                  id="expiry-warning"
+                  label="Certificate expiry warning (days)"
+                >
+                  <Input
+                    max="365"
+                    min="1"
+                    onChange={(event) => {
+                      setExpiryWarningDays(Number(event.target.value));
+                      setTested(false);
+                    }}
+                    type="number"
+                    value={expiryWarningDays}
+                  />
+                </FormField>
+              ) : null}
+              {monitorType === "http" ? (
+                <FormField
+                  className="sm:col-span-2"
+                  description="Comma-separated ranges. Redirects are followed only after safety validation."
+                  id="status-codes"
+                  label="Accepted status codes"
+                >
+                  <Input
+                    onChange={(event) => {
+                      setStatusCodes(event.target.value);
+                      setTested(false);
+                    }}
+                    value={statusCodes}
+                  />
+                </FormField>
+              ) : null}
             </CardContent>
           </>
         ) : null}
@@ -322,8 +467,14 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
               </div>
               <div className="rounded-lg border bg-surface-subtle p-4 text-sm leading-6">
                 <strong>Policy preview:</strong> Check every {interval} seconds with a {timeout} ms
-                timeout. Accept HTTP {statusCodes}. Open an incident after {failureThreshold}{" "}
-                consecutive failures. Resolve only after {recoveryThreshold} consecutive successes.
+                timeout.{" "}
+                {monitorType === "http"
+                  ? `Accept HTTP ${statusCodes}.`
+                  : monitorType === "tls"
+                    ? `Validate the certificate and warn within ${expiryWarningDays} days.`
+                    : `Match the exact expected ${dnsRecordType} record set.`}{" "}
+                Open an incident after {failureThreshold} consecutive failures. Resolve only after{" "}
+                {recoveryThreshold} consecutive successes.
               </div>
             </CardContent>
           </>
@@ -346,7 +497,9 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
               ) : (
                 <div className="flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center">
                   <FlaskConical aria-hidden="true" className="size-8 text-primary" />
-                  <p className="mt-3 font-medium">Ready to test {endpoint}</p>
+                  <p className="mt-3 font-medium">
+                    Ready to test {monitorType === "dns" ? hostname : endpoint}
+                  </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     The result becomes stale if the endpoint or policy changes.
                   </p>
@@ -378,8 +531,12 @@ export function MonitorWizard({ orgSlug, serviceId }: { orgSlug: string; service
                   <dd className="mt-1 font-medium">{name}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-text-secondary">Endpoint</dt>
-                  <dd className="mt-1 break-all font-mono text-xs">{endpoint}</dd>
+                  <dt className="text-xs text-text-secondary">
+                    {monitorType === "dns" ? "Hostname" : "Endpoint"}
+                  </dt>
+                  <dd className="mt-1 break-all font-mono text-xs">
+                    {monitorType === "dns" ? hostname : endpoint}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-text-secondary">Schedule</dt>

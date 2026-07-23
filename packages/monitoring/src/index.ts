@@ -1,7 +1,10 @@
-import { lookup } from "node:dns/promises";
+import { lookup, resolve4, resolve6, resolveCname, resolveMx, resolveTxt } from "node:dns/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP, type LookupFunction } from "node:net";
+import type { TLSSocket } from "node:tls";
+
+import type { DnsMonitorConfiguration, TlsMonitorConfiguration } from "@devrelay/contracts";
 
 const allowedPorts = new Set(["", "80", "443"]);
 const forbiddenHeaderNames = new Set([
@@ -47,6 +50,55 @@ export type MonitorTestEvidence = {
   redirectCount: number;
   summary: string;
 };
+
+export type TlsMonitorTestEvidence = {
+  code:
+    | "certificate_expired"
+    | "certificate_invalid"
+    | "hostname_mismatch"
+    | "network_error"
+    | "tls_valid"
+    | "tls_warning"
+    | "unsupported_tls_version";
+  daysUntilExpiry: number | null;
+  durationMilliseconds: number;
+  expiresAt: string | null;
+  ok: boolean;
+  summary: string;
+  tlsVersion: "TLSv1.2" | "TLSv1.3" | null;
+};
+
+export type DnsMonitorTestEvidence = {
+  code:
+    | "dns_malformed_response"
+    | "dns_nodata"
+    | "dns_nxdomain"
+    | "dns_record_limit_exceeded"
+    | "dns_resolver_failure"
+    | "dns_servfail"
+    | "dns_timeout"
+    | "dns_txt_limit_exceeded"
+    | "dns_valid"
+    | "unexpected_dns_records";
+  durationMilliseconds: number;
+  observedRecordCount: number;
+  ok: boolean;
+  recordType: DnsMonitorConfiguration["recordType"];
+  summary: string;
+};
+
+export type DnsResolver = {
+  resolve4(hostname: string): Promise<readonly string[]>;
+  resolve6(hostname: string): Promise<readonly string[]>;
+  resolveCname(hostname: string): Promise<readonly string[]>;
+  resolveMx(hostname: string): Promise<readonly { exchange: string; priority: number }[]>;
+  resolveTxt(hostname: string): Promise<readonly (readonly string[])[]>;
+};
+
+export type TlsHandshakeRequester = (
+  destination: ResolvedEndpoint,
+  timeoutMilliseconds: number,
+) => Promise<{ expiresAt: Date | null; tlsVersion: string | null }>;
 
 export class EndpointPolicyError extends Error {
   constructor(
@@ -384,6 +436,280 @@ export async function runSafeMonitorTest(options: {
       "Endpoint request failed or timed out",
     );
   }
+}
+
+export async function runSafeTlsMonitorTest(options: {
+  configuration: TlsMonitorConfiguration;
+  requester?: TlsHandshakeRequester;
+  resolver?: EndpointResolver;
+  timeoutMilliseconds: number;
+}): Promise<TlsMonitorTestEvidence> {
+  const startedAt = performance.now();
+  try {
+    const destination = await resolveEndpointDestination(
+      options.configuration.endpointUrl,
+      options.resolver,
+    );
+    if (destination.url.protocol !== "https:" || !["", "443"].includes(destination.url.port)) {
+      throw new EndpointPolicyError(
+        "TLS monitors require an HTTPS endpoint on port 443",
+        "unsupported_protocol",
+      );
+    }
+    const result = await (options.requester ?? requestTlsHandshake)(
+      destination,
+      options.timeoutMilliseconds,
+    );
+    const durationMilliseconds = elapsedMilliseconds(startedAt);
+    if (result.tlsVersion !== "TLSv1.2" && result.tlsVersion !== "TLSv1.3") {
+      return tlsEvidence(
+        "unsupported_tls_version",
+        false,
+        durationMilliseconds,
+        null,
+        null,
+        `The endpoint negotiated unsupported TLS ${result.tlsVersion ?? "version"}`,
+      );
+    }
+    if (!result.expiresAt || Number.isNaN(result.expiresAt.getTime())) {
+      return tlsEvidence(
+        "certificate_invalid",
+        false,
+        durationMilliseconds,
+        result.tlsVersion,
+        null,
+        "The endpoint did not provide a valid certificate expiry",
+      );
+    }
+    const daysUntilExpiry = Math.floor((result.expiresAt.getTime() - Date.now()) / 86_400_000);
+    if (daysUntilExpiry < 0) {
+      return tlsEvidence(
+        "certificate_expired",
+        false,
+        durationMilliseconds,
+        result.tlsVersion,
+        result.expiresAt,
+        "The endpoint certificate has expired",
+      );
+    }
+    const warning = daysUntilExpiry <= options.configuration.expiryWarningDays;
+    return tlsEvidence(
+      warning ? "tls_warning" : "tls_valid",
+      true,
+      durationMilliseconds,
+      result.tlsVersion,
+      result.expiresAt,
+      warning
+        ? `The endpoint certificate expires in ${daysUntilExpiry} days`
+        : "The endpoint TLS certificate is valid",
+    );
+  } catch (error) {
+    if (error instanceof EndpointPolicyError) throw error;
+    return tlsEvidence(
+      tlsErrorCode(error),
+      false,
+      elapsedMilliseconds(startedAt),
+      null,
+      null,
+      "The TLS connection or certificate validation failed",
+    );
+  }
+}
+
+export async function runSafeDnsMonitorTest(options: {
+  configuration: DnsMonitorConfiguration;
+  resolver?: DnsResolver;
+  timeoutMilliseconds: number;
+}): Promise<DnsMonitorTestEvidence> {
+  const startedAt = performance.now();
+  const resolver = options.resolver ?? systemDnsResolver;
+  try {
+    const observed = await resolveDnsRecords(
+      options.configuration,
+      resolver,
+      options.timeoutMilliseconds,
+    );
+    if (observed.length > 32)
+      return dnsEvidence(options.configuration, "dns_record_limit_exceeded", 0, false, startedAt);
+    if (
+      options.configuration.recordType === "TXT" &&
+      observed.some(
+        (record) =>
+          new TextEncoder().encode(typeof record === "string" ? record : "").byteLength > 1024,
+      )
+    ) {
+      return dnsEvidence(
+        options.configuration,
+        "dns_txt_limit_exceeded",
+        observed.length,
+        false,
+        startedAt,
+      );
+    }
+    const matches = sameRecordSet(options.configuration.expectedRecords, observed);
+    return dnsEvidence(
+      options.configuration,
+      matches ? "dns_valid" : "unexpected_dns_records",
+      observed.length,
+      matches,
+      startedAt,
+    );
+  } catch (error) {
+    return dnsEvidence(options.configuration, dnsErrorCode(error), 0, false, startedAt);
+  }
+}
+
+const systemDnsResolver: DnsResolver = { resolve4, resolve6, resolveCname, resolveMx, resolveTxt };
+
+const requestTlsHandshake: TlsHandshakeRequester = async (
+  destination: ResolvedEndpoint,
+  timeoutMilliseconds: number,
+): Promise<{ expiresAt: Date | null; tlsVersion: string | null }> => {
+  const address = destination.addresses[0];
+  if (!address)
+    throw new EndpointPolicyError(
+      "Endpoint hostname returned no addresses",
+      "dns_resolution_failed",
+    );
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(
+      destination.url,
+      {
+        agent: false,
+        family: address.family,
+        lookup: createPinnedLookup(address),
+        method: "HEAD",
+        servername: destination.url.hostname,
+        signal: AbortSignal.timeout(timeoutMilliseconds),
+      },
+      (response) => {
+        const socket = response.socket as TLSSocket;
+        const certificate = socket.getPeerCertificate() as { valid_to?: string };
+        response.resume();
+        response.on("end", () =>
+          resolve({
+            expiresAt: certificate.valid_to ? new Date(certificate.valid_to) : null,
+            tlsVersion: socket.getProtocol(),
+          }),
+        );
+      },
+    );
+    request.on("error", reject);
+    request.end();
+  });
+};
+
+async function resolveDnsRecords(
+  configuration: DnsMonitorConfiguration,
+  resolver: DnsResolver,
+  timeoutMilliseconds: number,
+): Promise<readonly unknown[]> {
+  const hostname = configuration.hostname;
+  const deadline = new Promise<never>((_, reject) => {
+    const timeout = setTimeout(
+      () => reject(Object.assign(new Error("DNS resolution timed out"), { code: "ETIMEOUT" })),
+      timeoutMilliseconds,
+    );
+    timeout.unref();
+  });
+  const result =
+    configuration.recordType === "A"
+      ? resolver.resolve4(hostname)
+      : configuration.recordType === "AAAA"
+        ? resolver.resolve6(hostname)
+        : configuration.recordType === "CNAME"
+          ? resolver.resolveCname(hostname)
+          : configuration.recordType === "MX"
+            ? resolver.resolveMx(hostname)
+            : resolver
+                .resolveTxt(hostname)
+                .then((records) => records.map((segments) => segments.join("")));
+  const records: readonly unknown[] = await Promise.race([result, deadline]);
+  if (configuration.recordType === "CNAME")
+    return (records as readonly string[]).map(normalizeDnsHostname);
+  if (configuration.recordType === "MX")
+    return (records as readonly { exchange: string; priority: number }[]).map((record) => ({
+      exchange: normalizeDnsHostname(record.exchange),
+      priority: record.priority,
+    }));
+  return records;
+}
+
+function normalizeDnsHostname(hostname: string): string {
+  return `${hostname.replace(/\.$/, "").toLowerCase()}.`;
+}
+
+function sameRecordSet(expected: readonly unknown[], observed: readonly unknown[]): boolean {
+  const serialize = (value: unknown) => JSON.stringify(value);
+  return (
+    expected.length === observed.length &&
+    [...new Set(expected.map(serialize))].length === expected.length &&
+    [...new Set(observed.map(serialize))].length === observed.length &&
+    expected.every((value) => new Set(observed.map(serialize)).has(serialize(value)))
+  );
+}
+
+function tlsErrorCode(error: unknown): TlsMonitorTestEvidence["code"] {
+  const code =
+    typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  if (code === "CERT_HAS_EXPIRED") return "certificate_expired";
+  if (code === "ERR_TLS_CERT_ALTNAME_INVALID") return "hostname_mismatch";
+  if (typeof code === "string" && code.includes("CERT")) return "certificate_invalid";
+  return "network_error";
+}
+
+function dnsErrorCode(error: unknown): DnsMonitorTestEvidence["code"] {
+  const code =
+    typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+  if (code === "ENOTFOUND") return "dns_nxdomain";
+  if (code === "ENODATA") return "dns_nodata";
+  if (code === "ESERVFAIL") return "dns_servfail";
+  if (code === "ETIMEOUT") return "dns_timeout";
+  if (code === "EBADRESP") return "dns_malformed_response";
+  return "dns_resolver_failure";
+}
+
+function elapsedMilliseconds(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
+function tlsEvidence(
+  code: TlsMonitorTestEvidence["code"],
+  ok: boolean,
+  durationMilliseconds: number,
+  tlsVersion: TlsMonitorTestEvidence["tlsVersion"],
+  expiresAt: Date | null,
+  summary: string,
+): TlsMonitorTestEvidence {
+  return {
+    code,
+    daysUntilExpiry: expiresAt ? Math.floor((expiresAt.getTime() - Date.now()) / 86_400_000) : null,
+    durationMilliseconds,
+    expiresAt: expiresAt?.toISOString() ?? null,
+    ok,
+    summary,
+    tlsVersion,
+  };
+}
+
+function dnsEvidence(
+  configuration: DnsMonitorConfiguration,
+  code: DnsMonitorTestEvidence["code"],
+  observedRecordCount: number,
+  ok: boolean,
+  startedAt: number,
+): DnsMonitorTestEvidence {
+  return {
+    code,
+    durationMilliseconds: elapsedMilliseconds(startedAt),
+    observedRecordCount,
+    ok,
+    recordType: configuration.recordType,
+    summary:
+      code === "dns_valid"
+        ? `DNS ${configuration.recordType} records match the expected set`
+        : `DNS ${configuration.recordType} check did not produce the expected result`,
+  };
 }
 
 function evidence(

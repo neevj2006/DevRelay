@@ -3,6 +3,7 @@ export * from "./enums.js";
 export * from "./environment.js";
 export * from "./errors.js";
 export * from "./http.js";
+export * from "./monitor-protocol.js";
 export * from "./pagination.js";
 export * from "./queue.js";
 export * from "./webhooks.js";

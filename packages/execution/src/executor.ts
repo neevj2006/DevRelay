@@ -3,13 +3,18 @@ import { randomUUID } from "node:crypto";
 import {
   type CheckOutcome,
   type MonitorCheckJob,
+  type MonitorProtocolConfiguration,
   type PolicyEvaluationJob,
 } from "@devrelay/contracts";
 import { type DatabaseClient } from "@devrelay/database";
 import {
+  type DnsMonitorTestEvidence,
   EndpointPolicyError,
   type MonitorTestEvidence,
+  runSafeDnsMonitorTest,
   runSafeMonitorTest,
+  runSafeTlsMonitorTest,
+  type TlsMonitorTestEvidence,
 } from "@devrelay/monitoring";
 import { type JobQueue, PermanentJobError, validateQueueJob } from "@devrelay/queue";
 
@@ -17,13 +22,17 @@ import { runtimeMetrics, structuredLog, withTrace } from "./observability.js";
 
 type MonitorExecutionConfig = {
   accepted_status_codes: readonly { from: number; to: number }[];
-  endpoint_url: string;
+  endpoint_url: string | null;
   method: "GET" | "HEAD";
+  monitor_type: MonitorProtocolConfiguration["type"];
+  protocol_config: MonitorProtocolConfiguration;
   request_headers: Readonly<Record<string, string>>;
   timeout_milliseconds: number;
 };
 
 export type CheckRunner = typeof runSafeMonitorTest;
+export type TlsCheckRunner = typeof runSafeTlsMonitorTest;
+export type DnsCheckRunner = typeof runSafeDnsMonitorTest;
 
 export class MonitorCheckExecutor {
   constructor(
@@ -32,6 +41,8 @@ export class MonitorCheckExecutor {
     private readonly workerId: string,
     private readonly region = "local",
     private readonly runner: CheckRunner = runSafeMonitorTest,
+    private readonly tlsRunner: TlsCheckRunner = runSafeTlsMonitorTest,
+    private readonly dnsRunner: DnsCheckRunner = runSafeDnsMonitorTest,
   ) {}
 
   async execute(value: unknown): Promise<{ duplicate: boolean; outcome?: CheckOutcome }> {
@@ -62,7 +73,7 @@ export class MonitorCheckExecutor {
        WHERE w.organization_id = $3 AND w.monitor_id = $4 AND w.scheduled_at = $5
        AND w.organization_id = m.organization_id AND w.monitor_id = m.id
        AND (w.status = 'pending' OR (w.status = 'claimed' AND w.lease_expires_at < now()))
-       RETURNING m.endpoint_url, m.method, p.timeout_milliseconds, p.accepted_status_codes, p.request_headers`,
+       RETURNING m.endpoint_url, m.method, m.monitor_type, m.protocol_config, p.timeout_milliseconds, p.accepted_status_codes, p.request_headers`,
       [this.workerId, leaseExpiresAt, job.organizationId, job.payload.monitorId, scheduledAt],
     );
     const configuration = claim.rows[0];
@@ -86,32 +97,65 @@ export class MonitorCheckExecutor {
     }
 
     const startedAt = new Date();
-    let evidence: MonitorTestEvidence | undefined;
+    let evidence: MonitorTestEvidence | TlsMonitorTestEvidence | DnsMonitorTestEvidence | undefined;
     let outcome: CheckOutcome;
     let evidenceCode: string;
     let evidenceSummary: string;
     try {
-      evidence = await this.runner({
-        endpointUrl: configuration.endpoint_url,
-        headers: configuration.request_headers,
-        method: configuration.method,
-        timeoutMilliseconds: configuration.timeout_milliseconds,
-      });
-      const accepted =
-        evidence.httpStatusCode !== null &&
-        configuration.accepted_status_codes.some(
-          ({ from, to }) => evidence!.httpStatusCode! >= from && evidence!.httpStatusCode! <= to,
-        );
-      outcome =
-        evidence.code === "network_error"
-          ? evidence.durationMilliseconds >= configuration.timeout_milliseconds - 50
-            ? "timeout"
-            : "failure"
-          : evidence.ok && accepted
-            ? "success"
-            : "failure";
-      evidenceCode = accepted ? evidence.code : "unexpected_http_status";
-      evidenceSummary = accepted ? evidence.summary : `Endpoint returned an unaccepted HTTP status`;
+      if (configuration.monitor_type === "http") {
+        if (!configuration.endpoint_url)
+          throw new PermanentJobError("HTTP monitor has no endpoint");
+        const httpEvidence = await this.runner({
+          endpointUrl: configuration.endpoint_url,
+          headers: configuration.request_headers,
+          method: configuration.method,
+          timeoutMilliseconds: configuration.timeout_milliseconds,
+        });
+        evidence = httpEvidence;
+        const accepted =
+          httpEvidence.httpStatusCode !== null &&
+          configuration.accepted_status_codes.some(
+            ({ from, to }) =>
+              httpEvidence.httpStatusCode! >= from && httpEvidence.httpStatusCode! <= to,
+          );
+        outcome =
+          httpEvidence.code === "network_error"
+            ? httpEvidence.durationMilliseconds >= configuration.timeout_milliseconds - 50
+              ? "timeout"
+              : "failure"
+            : httpEvidence.ok && accepted
+              ? "success"
+              : "failure";
+        evidenceCode = accepted ? httpEvidence.code : "unexpected_http_status";
+        evidenceSummary = accepted
+          ? httpEvidence.summary
+          : `Endpoint returned an unaccepted HTTP status`;
+      } else if (configuration.monitor_type === "tls") {
+        const tlsEvidence = await this.tlsRunner({
+          configuration: configuration.protocol_config as Extract<
+            MonitorProtocolConfiguration,
+            { type: "tls" }
+          >,
+          timeoutMilliseconds: configuration.timeout_milliseconds,
+        });
+        evidence = tlsEvidence;
+        outcome = tlsEvidence.ok ? "success" : "failure";
+        evidenceCode = tlsEvidence.code;
+        evidenceSummary = tlsEvidence.summary;
+      } else {
+        const dnsEvidence = await this.dnsRunner({
+          configuration: configuration.protocol_config as Extract<
+            MonitorProtocolConfiguration,
+            { type: "dns" }
+          >,
+          timeoutMilliseconds: configuration.timeout_milliseconds,
+        });
+        evidence = dnsEvidence;
+        outcome =
+          dnsEvidence.code === "dns_timeout" ? "timeout" : dnsEvidence.ok ? "success" : "failure";
+        evidenceCode = dnsEvidence.code;
+        evidenceSummary = dnsEvidence.summary;
+      }
     } catch (error) {
       outcome = error instanceof EndpointPolicyError ? "rejected_target" : "execution_error";
       evidenceCode = error instanceof EndpointPolicyError ? error.code : "execution_error";
@@ -128,8 +172,8 @@ export class MonitorCheckExecutor {
       const inserted = await client.query(
         `INSERT INTO check_results
          (organization_id, monitor_id, scheduled_at, outcome, started_at, finished_at, latency_milliseconds,
-          http_status_code, region, evidence_code, evidence_summary, safe_evidence)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          http_status_code, protocol, region, evidence_code, evidence_summary, safe_evidence)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (organization_id, monitor_id, scheduled_at) DO NOTHING RETURNING id`,
         [
           job.organizationId,
@@ -139,13 +183,12 @@ export class MonitorCheckExecutor {
           startedAt,
           finishedAt,
           evidence?.durationMilliseconds ?? Math.max(0, finishedAt.getTime() - startedAt.getTime()),
-          evidence?.httpStatusCode ?? null,
+          evidence && "httpStatusCode" in evidence ? evidence.httpStatusCode : null,
+          configuration.monitor_type,
           this.region,
           evidenceCode,
           evidenceSummary.slice(0, 1_000),
-          evidence
-            ? { finalOrigin: evidence.finalOrigin, redirectCount: evidence.redirectCount }
-            : null,
+          safeEvidence(configuration.monitor_type, evidence),
         ],
       );
       await client.query(
@@ -196,6 +239,27 @@ export class MonitorCheckExecutor {
     };
     await this.queue.enqueue(policyJob);
   }
+}
+
+function safeEvidence(
+  protocol: MonitorProtocolConfiguration["type"],
+  evidence: MonitorTestEvidence | TlsMonitorTestEvidence | DnsMonitorTestEvidence | undefined,
+): Record<string, unknown> | null {
+  if (!evidence) return null;
+  if (protocol === "http" && "finalOrigin" in evidence) {
+    return { finalOrigin: evidence.finalOrigin, redirectCount: evidence.redirectCount };
+  }
+  if (protocol === "tls" && "daysUntilExpiry" in evidence) {
+    return {
+      daysUntilExpiry: evidence.daysUntilExpiry,
+      expiresAt: evidence.expiresAt,
+      tlsVersion: evidence.tlsVersion,
+    };
+  }
+  if (protocol === "dns" && "recordType" in evidence) {
+    return { observedRecordCount: evidence.observedRecordCount, recordType: evidence.recordType };
+  }
+  return null;
 }
 
 export async function updateWorkerHeartbeat(

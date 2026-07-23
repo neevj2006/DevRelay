@@ -78,6 +78,13 @@
       "when": 1784320604064,
       "tag": "0010_awesome_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784813858771,
+      "tag": "0011_lumpy_kat_farrell",
+      "breakpoints": true
     }
   ]
 }

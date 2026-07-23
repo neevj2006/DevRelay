@@ -1,3 +1,4 @@
+import { dnsMonitorConfigurationSchema, tlsMonitorConfigurationSchema } from "@devrelay/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,7 +7,9 @@ import {
   EndpointPolicyError,
   isForbiddenAddress,
   normalizeEndpointUrl,
+  runSafeDnsMonitorTest,
   runSafeMonitorTest,
+  runSafeTlsMonitorTest,
   validateEndpointDestination,
   validateRequestHeaders,
 } from "./index.js";
@@ -141,6 +144,90 @@ describe("safe monitor test", () => {
     });
     expect(resolver).toHaveBeenCalledOnce();
     expect(requester).toHaveBeenCalledOnce();
+  });
+});
+
+describe("safe TLS monitoring", () => {
+  it("uses a validated pinned hostname and exposes only expiry summary data", async () => {
+    const result = await runSafeTlsMonitorTest({
+      configuration: tlsMonitorConfigurationSchema.parse({
+        endpointUrl: "https://example.com",
+        expiryWarningDays: 30,
+        type: "tls",
+      }),
+      requester: vi.fn().mockResolvedValue({
+        expiresAt: new Date(Date.now() + 10 * 86_400_000),
+        tlsVersion: "TLSv1.3",
+      }),
+      resolver: publicResolver,
+      timeoutMilliseconds: 10_000,
+    });
+    expect(result).toMatchObject({ code: "tls_warning", ok: true, tlsVersion: "TLSv1.3" });
+    expect(result).not.toHaveProperty("certificate");
+  });
+
+  it("treats certificate and hostname failures as unsafe evidence", async () => {
+    const configuration = tlsMonitorConfigurationSchema.parse({
+      endpointUrl: "https://example.com",
+      type: "tls",
+    });
+    await expect(
+      runSafeTlsMonitorTest({
+        configuration,
+        requester: async () => {
+          throw Object.assign(new Error("certificate mismatch"), {
+            code: "ERR_TLS_CERT_ALTNAME_INVALID",
+          });
+        },
+        resolver: publicResolver,
+        timeoutMilliseconds: 10_000,
+      }),
+    ).resolves.toMatchObject({ code: "hostname_mismatch", ok: false });
+  });
+});
+
+describe("safe DNS monitoring", () => {
+  it("uses exact normalized sets and a bounded resolver result", async () => {
+    const configuration = dnsMonitorConfigurationSchema.parse({
+      expectedRecords: [{ exchange: "MAIL.EXAMPLE.COM", priority: 10 }],
+      hostname: "example.com",
+      recordType: "MX",
+      type: "dns",
+    });
+    await expect(
+      runSafeDnsMonitorTest({
+        configuration,
+        resolver: {
+          resolve4: async () => [],
+          resolve6: async () => [],
+          resolveCname: async () => [],
+          resolveMx: async () => [{ exchange: "mail.example.com", priority: 10 }],
+          resolveTxt: async () => [],
+        },
+        timeoutMilliseconds: 5000,
+      }),
+    ).resolves.toMatchObject({ code: "dns_valid", observedRecordCount: 1, ok: true });
+  });
+
+  it("never treats resolver failure or unexpected answers as healthy", async () => {
+    const configuration = dnsMonitorConfigurationSchema.parse({
+      expectedRecords: ["192.0.2.1"],
+      hostname: "example.com",
+      recordType: "A",
+      type: "dns",
+    });
+    const resolver = {
+      resolve4: async () => {
+        throw Object.assign(new Error("missing"), { code: "ENOTFOUND" });
+      },
+      resolve6: async () => [],
+      resolveCname: async () => [],
+      resolveMx: async () => [],
+      resolveTxt: async () => [],
+    };
+    await expect(
+      runSafeDnsMonitorTest({ configuration, resolver, timeoutMilliseconds: 5000 }),
+    ).resolves.toMatchObject({ code: "dns_nxdomain", ok: false });
   });
 });
 
