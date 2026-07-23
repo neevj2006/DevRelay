@@ -62,6 +62,46 @@ export class SessionGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     assertTrustedBrowserOrigin(request, this.authService.environment.APP_ORIGIN);
+
+    if (isPublicDemoRead(request)) {
+      const demoUser = await this.databaseService.database.execute<{
+        email: string;
+        id: string;
+        name: string;
+      }>(sql`
+        SELECT app_user.id, app_user.email, app_user.name
+        FROM users AS app_user
+        JOIN organizations AS organization ON organization.owner_user_id = app_user.id
+        WHERE lower(organization.slug) = 'acme'
+          AND organization.deleted_at IS NULL
+        LIMIT 1
+      `);
+      const user = demoUser.rows[0];
+      if (!user) throw new UnauthorizedException("Public demo unavailable");
+      request.auth = {
+        session: {
+          createdAt: new Date(0),
+          expiresAt: new Date(8_640_000_000_000_000),
+          id: "public-read-only-demo",
+          ipAddress: null,
+          token: "public-read-only-demo",
+          updatedAt: new Date(0),
+          userAgent: null,
+          userId: user.id,
+        },
+        user: {
+          createdAt: new Date(0),
+          email: user.email,
+          emailVerified: false,
+          id: user.id,
+          image: null,
+          name: user.name,
+          updatedAt: new Date(0),
+        },
+      } as AuthenticatedSession;
+      return true;
+    }
+
     const session = await this.authService.auth.api.getSession({
       headers: fromNodeHeaders(request.headers),
     });
@@ -69,42 +109,6 @@ export class SessionGuard implements CanActivate {
       request.auth = session;
       return true;
     }
-    if (!isPublicDemoRead(request)) throw new UnauthorizedException("Authentication required");
-    const demoUser = await this.databaseService.database.execute<{
-      email: string;
-      id: string;
-      name: string;
-    }>(sql`
-      SELECT app_user.id, app_user.email, app_user.name
-      FROM users AS app_user
-      JOIN organizations AS organization ON organization.owner_user_id = app_user.id
-      WHERE lower(organization.slug) = 'acme'
-        AND organization.deleted_at IS NULL
-      LIMIT 1
-    `);
-    const user = demoUser.rows[0];
-    if (!user) throw new UnauthorizedException("Public demo unavailable");
-    request.auth = {
-      session: {
-        createdAt: new Date(0),
-        expiresAt: new Date(8_640_000_000_000_000),
-        id: "public-read-only-demo",
-        ipAddress: null,
-        token: "public-read-only-demo",
-        updatedAt: new Date(0),
-        userAgent: null,
-        userId: user.id,
-      },
-      user: {
-        createdAt: new Date(0),
-        email: user.email,
-        emailVerified: false,
-        id: user.id,
-        image: null,
-        name: user.name,
-        updatedAt: new Date(0),
-      },
-    } as AuthenticatedSession;
-    return true;
+    throw new UnauthorizedException("Authentication required");
   }
 }

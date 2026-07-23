@@ -58,8 +58,11 @@ describe("SessionGuard", () => {
     expect(request).toHaveProperty("auth", session);
   });
 
-  it("attaches the seeded demo member for anonymous safe reads only", async () => {
-    const getSession = vi.fn().mockResolvedValue(null);
+  it("uses the seeded demo member for safe demo reads even with a signed-in session", async () => {
+    const getSession = vi.fn().mockResolvedValue({
+      session: { id: "signed-in-session" },
+      user: { id: "another-user" },
+    });
     const guard = createGuard(getSession, [
       { email: "owner@example.invalid", id: "demo-user", name: "Demo Owner" },
     ]);
@@ -71,6 +74,7 @@ describe("SessionGuard", () => {
 
     await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
     expect(request).toHaveProperty("auth.user.id", "demo-user");
+    expect(getSession).not.toHaveBeenCalled();
   });
 
   it("never treats mutations or another organization as public demo access", () => {
