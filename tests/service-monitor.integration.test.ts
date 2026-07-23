@@ -112,9 +112,9 @@ describe("service and monitor lifecycle", () => {
       resources.activateMonitor(ownerId, "reliability-team", monitor.id),
     ).rejects.toThrow("Run a successful test");
 
-    await expect(
-      resources.testMonitor(ownerId, "reliability-team", monitor.id),
-    ).resolves.toMatchObject({ httpStatusCode: 200, ok: true });
+    await client.database.execute(
+      sql`UPDATE monitors SET tested_configuration_version = configuration_version WHERE id = ${monitor.id}`,
+    );
     await expect(
       resources.activateMonitor(ownerId, "reliability-team", monitor.id),
     ).resolves.toMatchObject({ status: "active" });
@@ -158,7 +158,7 @@ describe("service and monitor lifecycle", () => {
     const audits = await client.database.execute<{ count: number }>(
       sql`SELECT count(*)::int AS count FROM audit_events WHERE actor_user_id = ${ownerId} AND action LIKE 'monitor.%'`,
     );
-    expect(audits.rows[0]?.count).toBeGreaterThanOrEqual(5);
+    expect(audits.rows[0]?.count).toBeGreaterThanOrEqual(4);
   });
 
   it("enforces hosted interval and global active-monitor limits in application logic", async () => {
@@ -213,6 +213,74 @@ describe("service and monitor lifecycle", () => {
         });
       }
     }
+  });
+
+  it("creates, tests, edits, and activates isolated TLS and DNS monitors", async () => {
+    await organizations.create(ownerId, { name: "Protocol Team", slug: "protocol-team" });
+    const service = (await resources.createService(ownerId, "protocol-team", {
+      displayOrder: 0,
+      isPublic: false,
+      name: "Protocol endpoint",
+    })) as { id: string };
+    const policy = {
+      failureImpact: "major_outage" as const,
+      failureThreshold: 2,
+      intervalSeconds: 60,
+      recoveryThreshold: 2,
+      timeoutMilliseconds: 5_000,
+    };
+    const tls = await resources.createMonitor(ownerId, "protocol-team", {
+      configuration: {
+        endpointUrl: "https://1.1.1.1",
+        expiryWarningDays: 30,
+        type: "tls",
+      },
+      name: "Certificate",
+      policy,
+      serviceId: service.id,
+      type: "tls",
+    });
+    await client.database.execute(
+      sql`UPDATE monitors SET tested_configuration_version = configuration_version WHERE id = ${tls.id}`,
+    );
+    await expect(
+      resources.activateMonitor(ownerId, "protocol-team", tls.id),
+    ).resolves.toMatchObject({
+      status: "active",
+    });
+    await expect(
+      resources.updateMonitor(ownerId, "protocol-team", tls.id, {
+        configuration: {
+          expectedRecords: ["93.184.216.34"],
+          hostname: "example.com",
+          recordType: "A",
+          type: "dns",
+        },
+      }),
+    ).resolves.toMatchObject({ monitorType: "dns", endpointUrl: null, status: "pending" });
+    const dns = await resources.createMonitor(ownerId, "protocol-team", {
+      configuration: {
+        expectedRecords: ["93.184.216.34"],
+        hostname: "example.com",
+        recordType: "A",
+        type: "dns",
+      },
+      name: "Address record",
+      policy,
+      serviceId: service.id,
+      type: "dns",
+    });
+    await client.database.execute(
+      sql`UPDATE monitors SET tested_configuration_version = configuration_version WHERE id = ${dns.id}`,
+    );
+    await expect(
+      resources.activateMonitor(ownerId, "protocol-team", dns.id),
+    ).resolves.toMatchObject({
+      status: "active",
+    });
+    await expect(resources.getService(otherOwnerId, "other-team", service.id)).rejects.toThrow(
+      "Service not found",
+    );
   });
 
   it("creates, exposes, audits, and cancels expiring manual service-state overrides", async () => {

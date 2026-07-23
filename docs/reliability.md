@@ -34,15 +34,15 @@ pnpm exec vitest run tests/reliability-proof.integration.test.ts tests/queue-exe
 
 ## Test inventory
 
-The release baseline contains 178 automated checks:
+The current local release gate contains 201 automated checks:
 
-| Category                     | Count | Coverage                                                                                                            |
-| ---------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------- |
-| Unit                         |    96 | contracts, configuration, policies, HTTP safety, queue behavior, notifications, observability, and UI logic         |
-| PostgreSQL/Redis integration |    74 | schema invariants, tenancy, auth, monitoring, incidents, status, delivery, operations, queues, and fault/load proof |
-| Rendered Chromium            |     8 | authenticated and public journeys across desktop/mobile, keyboard paths, layout, console, and axe checks            |
+| Category                     | Count | Coverage                                                                                                                   |
+| ---------------------------- | ----: | -------------------------------------------------------------------------------------------------------------------------- |
+| Unit                         |   113 | contracts, configuration, policies, HTTP/TLS/DNS safety, queue behavior, notifications, observability, and UI logic        |
+| PostgreSQL/Redis integration |    75 | schema invariants, tenancy, auth, monitoring, incidents, status, delivery, operations, queues, and fault/load proof        |
+| Rendered Chromium            |    13 | authenticated and public journeys across desktop/mobile, monitor workflow, keyboard paths, layout, console, and axe checks |
 
-Counts describe the recorded release baseline and should be updated when the suite changes.
+TLS/DNS test runners are injected in the protocol unit tests and API/database integration test: they do not depend on public DNS answers, public certificate expiry, or a hosted fixture. Counts describe this local release gate and should be updated when the suite changes.
 
 ## Fault experiments
 

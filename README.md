@@ -1,6 +1,6 @@
 # DevRelay
 
-DevRelay is a multi-tenant monitoring and incident-response SaaS that turns scheduled HTTP checks into confirmed service state, exactly one incident, public status updates, and retry-safe subscriber notifications. It is built as a TypeScript modular monolith with PostgreSQL as the source of truth, interchangeable BullMQ and QStash queue adapters, a transactional outbox, tenant-scoped authorization, and explicit defenses for outbound-request and public/private data boundaries.
+DevRelay is a multi-tenant monitoring and incident-response SaaS that turns scheduled HTTP, TLS, and DNS checks into confirmed service state, exactly one incident, public status updates, and retry-safe subscriber notifications. It is built as a TypeScript modular monolith with PostgreSQL as the source of truth, interchangeable BullMQ and QStash queue adapters, a transactional outbox, tenant-scoped authorization, and explicit defenses for outbound-request and public/private data boundaries.
 
 [Open the live demo](https://devrelay-delta.vercel.app) · [View the public status page](https://devrelay-delta.vercel.app/status/acme) · [Read the architecture guide](docs/architecture.md)
 
@@ -10,7 +10,7 @@ The hosted demo uses deterministic, non-personal data. Its public status page ne
 
 ```mermaid
 flowchart LR
-  A["Schedule due HTTP check"] --> B["Validate and pin public destination"]
+  A["Schedule due HTTP, TLS, or DNS check"] --> B["Validate protocol-specific target"]
   B --> C["Persist one check result per monitor window"]
   C --> D{"Policy threshold reached?"}
   D -- "No" --> E["Keep current evidence-backed state"]
@@ -52,7 +52,7 @@ packages/
   contracts/    Shared HTTP, queue, and webhook contracts
   database/     Drizzle schema, migrations, and transaction helpers
   execution/    Scheduler, checks, policy, incidents, outbox, and delivery
-  monitoring/   Outbound HTTP safety and monitoring domain
+  monitoring/   Outbound HTTP, TLS, DNS safety and monitoring domain
   queue/        JobQueue contract with BullMQ and QStash adapters
   ui/           Shared source-owned UI primitives
 ```
@@ -115,6 +115,14 @@ Copy `.env.example` and keep real secrets outside Git. The example groups every 
 
 Production requires unique authentication and notification encryption secrets. Do not reuse the development examples. QStash must stay paused until migrations, callbacks, origins, and provider credentials have been verified.
 
+## Supported monitor protocols
+
+- **HTTP:** public `http`/`https` endpoints using `GET` or `HEAD`, bounded redirects, request headers, status-code policy, timeout, and response size.
+- **TLS:** public HTTPS endpoints on port 443 with platform trust-chain and hostname validation, Server Name Indication, TLS 1.2/1.3, and an expiry-warning threshold. Results retain only negotiated TLS version and expiry summary.
+- **DNS:** exact normalized A, AAAA, CNAME, MX, or TXT record-set matching. Resolver answers are bounded; DNS errors and unexpected records are failures, never healthy evidence.
+
+The automated suite injects TLS and DNS runners rather than using public domains or live certificates. Local development needs no certificate authority or hosted DNS fixture. DNSSEC, custom resolvers, TCP, domain-expiry, and browser-synthetic monitoring remain outside this MVP.
+
 ## Validation
 
 Start local infrastructure, install Chromium once, and run the complete release gate:
@@ -140,7 +148,7 @@ pnpm build
 
 ## Measured reliability
 
-The release proof contains 178 automated checks: 96 unit tests, 74 PostgreSQL/Redis integration tests, and 8 rendered Chromium scenarios. The fault suite covers duplicate and out-of-order messages, simultaneous incident creation, killed database work, queue-client restarts, notification retries, scheduler stoppage, role boundaries, responsive behavior, keyboard paths, and axe accessibility rules.
+The release proof contains 201 automated checks: 113 unit tests, 75 PostgreSQL/Redis integration tests, and 13 rendered Chromium scenarios. Phase 17 protocol coverage uses deterministic injected TLS/DNS runners and database integration cases rather than public domains or live certificate expiry. The fault suite covers duplicate and out-of-order messages, simultaneous incident creation, killed database work, queue-client restarts, notification retries, scheduler stoppage, role boundaries, responsive behavior, keyboard paths, and axe accessibility rules.
 
 A representative local run seeded 6,000 check windows/results and 2,000 audit events. PostgreSQL selected the dedicated recent-monitor and tenant audit-timeline indexes, and the focused fault/load suite completed in 1.15 seconds while retention stayed below its five-second non-blocking gate. Detection and recovery are policy-bound rather than claimed as network benchmarks: with the hosted minimum five-minute interval, the default three-failure/two-success policy confirms an outage after three consecutive results and recovery after two consecutive successes. Hosted end-to-end notification latency is not yet published as a performance claim.
 
@@ -150,7 +158,7 @@ Full methodology and local-versus-hosted labels are in [docs/reliability.md](doc
 
 Production uses two Vercel Hobby projects, a Neon Free PostgreSQL project, one QStash dispatcher schedule, and controlled Resend Free delivery. The hosted safeguards enforce:
 
-- five active HTTP monitors across the demo;
+- five active monitors across the demo, regardless of protocol;
 - a minimum 300-second hosted interval;
 - batches of at most five and an application cap of 250 QStash messages per UTC day;
 - 30-day check-result and delivery-attempt retention;
@@ -161,13 +169,13 @@ Quota or provider failure leaves durable work pending or failed for inspection; 
 
 ## Security boundaries
 
-DevRelay treats tenant identity, outbound monitoring, provider callbacks, queue duplication, secrets, and public incident projection as explicit trust boundaries. Every tenant-owned query is organization-scoped; monitor and webhook destinations are restricted to public HTTP(S) addresses and pinned after DNS validation; callback signatures and replay identities are verified; public projections use allowlisted fields; and raw response bodies, secrets, and private incident notes are excluded from public output.
+DevRelay treats tenant identity, outbound monitoring, provider callbacks, queue duplication, secrets, and public incident projection as explicit trust boundaries. Every tenant-owned query is organization-scoped; HTTP/TLS monitor destinations are restricted to public HTTPS/HTTP addresses and pinned after DNS validation; DNS checks use only the supported record types and bounded safe summaries; callback signatures and replay identities are verified; public projections use allowlisted fields; and raw response bodies, certificates, resolver replies, secrets, and private incident notes are excluded from public output.
 
 Application-layer SSRF controls are not a substitute for a deny-by-default egress firewall, and the free hosted tier does not provide that network boundary. The existing repository security review and its regression coverage are summarized in [docs/security.md](docs/security.md). Outgoing webhook consumers should follow [docs/outgoing-webhooks.md](docs/outgoing-webhooks.md).
 
 ## Roadmap
 
-The MVP intentionally defers TCP/DNS/TLS/domain/browser monitors, multi-region quorum checks, on-call rotations, Slack/Teams/SMS delivery, billing, custom domains, long-term archives, and advanced SLO burn-rate analytics. The next reliability priorities are network-level egress isolation, a supported tenant export/deletion workflow, and hosted performance sampling after enough real traffic exists to report meaningful numbers.
+The MVP intentionally defers TCP, domain-expiry, browser-synthetic, DNSSEC, custom-resolver, and authoritative-DNS monitors; multi-region quorum checks; on-call rotations; Slack/Teams/SMS delivery; billing; custom domains; long-term archives; and advanced SLO burn-rate analytics. The next reliability priorities are network-level egress isolation, a supported tenant export/deletion workflow, and hosted performance sampling after enough real traffic exists to report meaningful numbers.
 
 ## License
 

@@ -30,14 +30,18 @@ incident, or notification.
 
 ## Outbound network policy
 
-Monitor and webhook destinations accept only HTTP or HTTPS on ports 80 and 443. URLs containing
+HTTP monitor and webhook destinations accept only HTTP or HTTPS on ports 80 and 443. TLS monitors
+accept only HTTPS on port 443 and validate the platform trust chain and requested hostname using SNI.
+URLs containing
 credentials or credential-like query keys are rejected. DevRelay resolves every hostname, rejects
 the whole destination when any IPv4 or IPv6 answer is loopback, private, link-local, carrier-grade
 NAT, documentation, benchmark, multicast, unspecified, or otherwise non-public, and repeats the
 same policy for every redirect. The HTTP connection uses a custom lookup pinned to an address from
 the validated set, so a later DNS answer cannot replace the address between validation and connect.
-Requests use bounded methods, headers, redirects, timeouts, and response sizes. Response bodies and
-raw transport errors are not stored.
+Requests use bounded methods, headers, redirects, timeouts, and response sizes. DNS monitors allow only
+A, AAAA, CNAME, MX, and TXT lookups with a platform resolver, a bounded deadline, record/TXT caps, and
+exact normalized matching; raw resolver replies are not stored. Response bodies, certificates, and raw
+transport errors are not stored.
 
 The hosted free tier does not provide a dedicated egress firewall. Application-layer address
 validation is therefore backed by tests but is not equivalent to network isolation. Production
